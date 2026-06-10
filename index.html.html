@@ -1,0 +1,1995 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>E-Commerce Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Sarabun',sans-serif;background:#0F172A;color:#F1F5F9;height:100vh;overflow:hidden}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:#1E293B}
+::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}
+select option{background:#1E293B;color:#F1F5F9}
+input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1)}
+@keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.toast{animation:slideIn .2s ease}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+
+// ===================== DATA LAYER =====================
+const DB = {
+  get: k => { try { return JSON.parse(localStorage.getItem('ecm_'+k)) } catch { return null } },
+  set: (k, v) => localStorage.setItem('ecm_'+k, JSON.stringify(v)),
+}
+
+let _idCounters = {}
+function nextId(key) {
+  const items = DB.get(key) || []
+  return items.length > 0 ? Math.max(...items.map(i => i.id)) + 1 : 1
+}
+
+const CRUD = {
+  all: key => DB.get(key) || [],
+  add: (key, data) => {
+    const items = DB.get(key) || []
+    const item = { id: nextId(key), ...data, created_at: new Date().toISOString() }
+    DB.set(key, [...items, item])
+    return item
+  },
+  update: (key, id, data) => {
+    const items = (DB.get(key) || []).map(i => i.id === id ? { ...i, ...data } : i)
+    DB.set(key, items)
+  },
+  remove: (key, id) => DB.set(key, (DB.get(key) || []).filter(i => i.id !== id)),
+}
+
+function initSeed() {
+  if (!DB.get('stock_logs')) DB.set('stock_logs', [])
+  if (!DB.get('orders')) DB.set('orders', [])
+  if (!DB.get('ads')) {
+    DB.set('ads', [
+      { id:1, campaign_name:'Shopee Auto Parts Summer Sale', platform:'Shopee', store_id:1, store_name:'ร้านอะไหล่รถยนต์ไทย', start_date:'2024-06-01', end_date:'2024-06-30', budget:5000, actual_spend:4820, impressions:125400, clicks:3762, orders_count:89, revenue:42500, status:'ended', note:'', created_at:'2024-06-01' },
+      { id:2, campaign_name:'Facebook Auto Parts Boost', platform:'Facebook', store_id:3, store_name:'Auto Parts Thailand Page', start_date:'2024-07-01', end_date:'2024-07-31', budget:3000, actual_spend:2950, impressions:88200, clicks:1940, orders_count:45, revenue:21800, status:'ended', note:'', created_at:'2024-07-01' },
+      { id:3, campaign_name:'TikTok Medical Live', platform:'TikTok', store_id:6, store_name:'@medicalequip_th', start_date:'2024-08-01', end_date:'2024-08-31', budget:4000, actual_spend:3800, impressions:210000, clicks:8400, orders_count:62, revenue:48600, status:'ended', note:'', created_at:'2024-08-01' },
+      { id:4, campaign_name:'Shopee Medical 9.9 Sale', platform:'Shopee', store_id:2, store_name:'ร้านอุปกรณ์การแพทย์ไทย', start_date:'2024-09-01', end_date:'2024-09-09', budget:6000, actual_spend:2100, impressions:45000, clicks:1800, orders_count:28, revenue:19200, status:'active', note:'', created_at:'2024-09-01' },
+    ])
+  }
+  if (DB.get('stores')) return
+  const stores = [
+    { id:1, platform:'Shopee', store_name:'ร้านอะไหล่รถยนต์ไทย', category:'auto_parts', url:'https://shopee.co.th/thai_autoparts', username:'thai_autoparts', password_hint:'auto123', responsible_person:'คุณสมศักดิ์', role:'ผู้ดูแลหลัก', status:'active', note:'ร้านหลักอะไหล่รถยนต์', created_at:'2024-01-01' },
+    { id:2, platform:'Shopee', store_name:'ร้านอุปกรณ์การแพทย์ไทย', category:'medical', url:'https://shopee.co.th/thai_medical', username:'thai_medical', password_hint:'med456', responsible_person:'คุณสุภา', role:'ผู้ดูแลหลัก', status:'active', note:'ร้านหลักอุปกรณ์การแพทย์', created_at:'2024-01-01' },
+    { id:3, platform:'Facebook', store_name:'Auto Parts Thailand Page', category:'auto_parts', url:'https://facebook.com/autopartsth', username:'autopartsth', password_hint:'fb789', responsible_person:'คุณวิโรจน์', role:'แอดมิน', status:'active', note:'เพจ Facebook อะไหล่รถยนต์', created_at:'2024-01-01' },
+    { id:4, platform:'Facebook', store_name:'Medical Equipment Thailand', category:'medical', url:'https://facebook.com/medequipth', username:'medequipth', password_hint:'fb012', responsible_person:'คุณสุภา', role:'แอดมิน', status:'active', note:'เพจ Facebook อุปกรณ์การแพทย์', created_at:'2024-01-01' },
+    { id:5, platform:'TikTok', store_name:'@autoparts_th', category:'auto_parts', url:'https://tiktok.com/@autoparts_th', username:'autoparts_th', password_hint:'tt345', responsible_person:'คุณวิโรจน์', role:'ครีเอเตอร์', status:'active', note:'TikTok อะไหล่รถยนต์', created_at:'2024-01-01' },
+    { id:6, platform:'TikTok', store_name:'@medicalequip_th', category:'medical', url:'https://tiktok.com/@medicalequip_th', username:'medicalequip_th', password_hint:'tt678', responsible_person:'คุณนภาพร', role:'ครีเอเตอร์', status:'active', note:'TikTok อุปกรณ์การแพทย์', created_at:'2024-01-01' },
+  ]
+  const products = [
+    { id:1, sku:'AP001', name:'ไส้กรองอากาศ Toyota Camry 2018-2022', category:'auto_parts', brand:'Denso', store_ids:'1,2,3,5', cost_price:180, selling_price:450, stock:45, min_stock:10, lead_time_days:7, supplier_id:1, status:'active', note:'', created_at:'2024-01-01' },
+    { id:2, sku:'AP002', name:'ผ้าเบรกหน้า Honda Civic 2016-2021', category:'auto_parts', brand:'Bendix', store_ids:'1,3,5', cost_price:650, selling_price:1490, stock:12, min_stock:5, lead_time_days:7, supplier_id:1, status:'active', note:'ขายดีมาก', created_at:'2024-01-01' },
+    { id:3, sku:'AP003', name:'น้ำมันเครื่อง 10W-40 4 ลิตร', category:'auto_parts', brand:'Castrol', store_ids:'1,2,3,4,5,6', cost_price:280, selling_price:620, stock:80, min_stock:20, lead_time_days:3, supplier_id:5, status:'active', note:'', created_at:'2024-01-01' },
+    { id:4, sku:'AP004', name:'ยางนอก Michelin 195/65R15', category:'auto_parts', brand:'Michelin', store_ids:'1,3', cost_price:2800, selling_price:4500, stock:3, min_stock:3, lead_time_days:10, supplier_id:6, status:'active', note:'สต็อกน้อย', created_at:'2024-01-01' },
+    { id:5, sku:'AP005', name:'ไฟหน้า LED Honda PCX', category:'auto_parts', brand:'Philips', store_ids:'1,2,5', cost_price:390, selling_price:890, stock:28, min_stock:8, lead_time_days:5, supplier_id:2, status:'active', note:'', created_at:'2024-01-01' },
+    { id:6, sku:'MD001', name:'เสาน้ำเกลือสแตนเลส ปรับความสูงได้', category:'medical', brand:'INVACARE', store_ids:'2,4,6', cost_price:1200, selling_price:2800, stock:15, min_stock:5, lead_time_days:14, supplier_id:3, status:'active', note:'', created_at:'2024-01-01' },
+    { id:7, sku:'MD002', name:'เตียงตรวจโรคปรับระดับ 2 Section', category:'medical', brand:'Paramount', store_ids:'2,4', cost_price:8500, selling_price:18500, stock:2, min_stock:2, lead_time_days:21, supplier_id:4, status:'active', note:'สินค้าขนาดใหญ่', created_at:'2024-01-01' },
+    { id:8, sku:'MD003', name:'ชุดวัดความดันโลหิตดิจิทัล', category:'medical', brand:'Omron', store_ids:'2,4,6', cost_price:890, selling_price:1990, stock:22, min_stock:8, lead_time_days:7, supplier_id:3, status:'active', note:'', created_at:'2024-01-01' },
+    { id:9, sku:'MD004', name:'ถุงมือยางทางการแพทย์ (100 ชิ้น)', category:'medical', brand:'Hartalega', store_ids:'2,4,6', cost_price:85, selling_price:180, stock:0, min_stock:30, lead_time_days:7, supplier_id:7, status:'active', note:'สต็อกหมด', created_at:'2024-01-01' },
+  ]
+  const team = [
+    { id:1, employee_id:'EMP001', full_name:'คุณสมศักดิ์ วงศ์ดี', position:'ผู้จัดการฝ่ายขาย', assigned_stores:'1,2,3,4,5,6', responsibilities:'บริหารภาพรวมทุกช่องทาง', phone:'089-111-2222', line_id:'@somsak', email:'somsak@company.com', start_date:'2022-01-10', note:'' },
+    { id:2, employee_id:'EMP002', full_name:'คุณสุภา รักดี', position:'ผู้ดูแลร้าน Medical', assigned_stores:'2,4,6', responsibilities:'จัดการสินค้าและออเดอร์ Medical', phone:'089-333-4444', line_id:'@supa', email:'supa@company.com', start_date:'2022-06-01', note:'เชี่ยวชาญอุปกรณ์การแพทย์' },
+    { id:3, employee_id:'EMP003', full_name:'คุณวิโรจน์ ใจดี', position:'Content Creator', assigned_stores:'3,4,5,6', responsibilities:'ถ่ายทำ ตัดต่อ โพสต์คอนเทนต์', phone:'089-555-6666', line_id:'@wirot', email:'wirot@company.com', start_date:'2023-03-15', note:'' },
+    { id:4, employee_id:'EMP004', full_name:'คุณนภาพร สดใส', position:'ผู้ดูแล TikTok', assigned_stores:'5,6', responsibilities:'ไลฟ์สด ตอบแชท TikTok', phone:'089-777-8888', line_id:'@napaporn', email:'napaporn@company.com', start_date:'2023-09-01', note:'' },
+    { id:5, employee_id:'EMP005', full_name:'คุณธนพล มั่งมี', position:'ผู้ดูแลคลังสินค้า', assigned_stores:'1,2', responsibilities:'รับ-ส่งสินค้า ตรวจสต็อก', phone:'089-999-0000', line_id:'@tanapon', email:'tanapon@company.com', start_date:'2021-11-20', note:'มีรถกระบะส่วนตัว' },
+  ]
+  const suppliers = [
+    { id:1, code:'SUP001', company_name:'บริษัท ไทยอะไหล่ยนต์ จำกัด', product_type:'อะไหล่รถยนต์', contact_person:'คุณสมชาย', phone:'081-111-2222', line_or_email:'@somchai_auto', address:'กรุงเทพฯ', lead_time_days:7, payment_terms:'เครดิต 30 วัน', note:'ซัพพลายเออร์หลักอะไหล่รถยนต์' },
+    { id:2, code:'SUP002', company_name:'บริษัท มอเตอร์ไซค์พาร์ท จำกัด', product_type:'อะไหล่มอเตอร์ไซค์', contact_person:'คุณวิชัย', phone:'082-333-4444', line_or_email:'@vichai_moto', address:'นนทบุรี', lead_time_days:5, payment_terms:'เครดิต 15 วัน', note:'' },
+    { id:3, code:'SUP003', company_name:'บริษัท เมดิคอลซัพพลาย จำกัด', product_type:'อุปกรณ์การแพทย์', contact_person:'คุณสุดา', phone:'083-555-6666', line_or_email:'suda@medical.co.th', address:'กรุงเทพฯ', lead_time_days:14, payment_terms:'เครดิต 45 วัน', note:'นำเข้าจากต่างประเทศ' },
+    { id:4, code:'SUP004', company_name:'บริษัท เฮลธ์แคร์อุปกรณ์ จำกัด', product_type:'เตียงและเฟอร์นิเจอร์การแพทย์', contact_person:'คุณประยุทธ', phone:'084-777-8888', line_or_email:'@prayuth_health', address:'สมุทรปราการ', lead_time_days:21, payment_terms:'เครดิต 60 วัน', note:'สินค้าขนาดใหญ่ ค่าส่งสูง' },
+    { id:5, code:'SUP005', company_name:'บริษัท ออยล์แอนด์ลูบ จำกัด', product_type:'น้ำมันเครื่องและสารหล่อลื่น', contact_person:'คุณธนา', phone:'085-999-0000', line_or_email:'@thana_oil', address:'ชลบุรี', lead_time_days:3, payment_terms:'เงินสด', note:'' },
+    { id:6, code:'SUP006', company_name:'บริษัท ไทยยางรถยนต์ จำกัด', product_type:'ยางรถยนต์และยางมอเตอร์ไซค์', contact_person:'คุณมานะ', phone:'086-111-3333', line_or_email:'mana@thaiyag.com', address:'ระยอง', lead_time_days:10, payment_terms:'เครดิต 30 วัน', note:'' },
+    { id:7, code:'SUP007', company_name:'บริษัท เมดไลน์ไทย จำกัด', product_type:'วัสดุสิ้นเปลือง', contact_person:'คุณนภา', phone:'087-444-5555', line_or_email:'napa@medline.th', address:'กรุงเทพฯ', lead_time_days:7, payment_terms:'เครดิต 30 วัน', note:'ผ้าก๊อซ เข็มฉีดยา ฯลฯ' },
+  ]
+  DB.set('stores', stores)
+  DB.set('products', products)
+  DB.set('team', team)
+  DB.set('suppliers', suppliers)
+}
+
+initSeed()
+
+// ===================== HELPERS =====================
+const { useState, useEffect, useCallback, useRef } = React
+
+const C = {
+  bg: '#0F172A', surface: '#1E293B', border: '#334155',
+  primary: '#3B82F6', auto: '#F97316', medical: '#10B981',
+  text: '#F1F5F9', muted: '#94A3B8', red: '#EF4444', yellow: '#EAB308',
+}
+
+const S = {
+  card: { background: C.surface, borderRadius: 16, border: `1px solid ${C.border}`, padding: 20 },
+  input: { width:'100%', background: C.bg, border: `1px solid ${C.border}`, color: C.text, borderRadius: 12, padding: '8px 12px', fontSize: 14, outline: 'none', fontFamily: 'Sarabun, sans-serif' },
+  btn: (bg='#3B82F6', c='white') => ({ background: bg, color: c, border: 'none', borderRadius: 12, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Sarabun, sans-serif', display:'inline-flex', alignItems:'center', gap:6 }),
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: 13 },
+  th: { textAlign: 'left', padding: '10px 14px', color: C.muted, fontSize: 11, textTransform: 'uppercase', fontWeight: 600, borderBottom: `1px solid ${C.border}`, background: C.surface, position: 'sticky', top: 0 },
+  td: { padding: '10px 14px', borderBottom: `1px solid ${C.border}`, color: C.text },
+  label: { display: 'block', fontSize: 11, color: C.muted, marginBottom: 4 },
+}
+
+const catLabel = c => c === 'auto_parts' ? 'อะไหล่รถ' : c === 'medical' ? 'การแพทย์' : c
+const profit = p => p.selling_price > 0 ? ((p.selling_price - p.cost_price) / p.selling_price * 100).toFixed(1) : '0'
+const numFmt = n => Number(n).toLocaleString('th-TH')
+
+// ===================== TOAST =====================
+let toastListeners = []
+let toastId = 0
+function addToast(msg, type='success') {
+  const t = { id: ++toastId, msg, type }
+  toastListeners.forEach(fn => fn(t))
+}
+
+function ToastContainer() {
+  const [toasts, setToasts] = useState([])
+  useEffect(() => {
+    const fn = t => {
+      setToasts(p => [...p, t])
+      setTimeout(() => setToasts(p => p.filter(x => x.id !== t.id)), 3000)
+    }
+    toastListeners.push(fn)
+    return () => { toastListeners = toastListeners.filter(f => f !== fn) }
+  }, [])
+  return (
+    <div style={{ position:'fixed', bottom:24, right:24, zIndex:1000, display:'flex', flexDirection:'column', gap:8 }}>
+      {toasts.map(t => (
+        <div key={t.id} className="toast" style={{
+          display:'flex', alignItems:'center', gap:10, padding:'12px 16px',
+          borderRadius:12, fontSize:13, fontWeight:500, cursor:'pointer',
+          background: t.type==='success' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+          border: `1px solid ${t.type==='success' ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)'}`,
+          color: t.type==='success' ? '#34D399' : '#F87171',
+        }} onClick={() => setToasts(p => p.filter(x => x.id !== t.id))}>
+          {t.type==='success' ? '✓' : '✕'} {t.msg}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ===================== MODAL =====================
+function Modal({ title, onClose, children, width=520 }) {
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.6)', backdropFilter:'blur(4px)' }} onClick={onClose} />
+      <div style={{ position:'relative', width:'100%', maxWidth:width, background:C.surface, borderRadius:20, border:`1px solid ${C.border}`, boxShadow:'0 25px 60px rgba(0,0,0,0.5)' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 20px', borderBottom:`1px solid ${C.border}` }}>
+          <span style={{ fontWeight:600, fontSize:16 }}>{title}</span>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:20, lineHeight:1 }}>×</button>
+        </div>
+        <div style={{ padding:20, maxHeight:'75vh', overflowY:'auto' }}>{children}</div>
+      </div>
+    </div>
+  )
+}
+
+// ===================== BADGES =====================
+function PlatformBadge({ platform }) {
+  const m = { Shopee:{bg:'rgba(249,115,22,0.15)',c:'#FB923C'}, Facebook:{bg:'rgba(59,130,246,0.15)',c:'#60A5FA'}, TikTok:{bg:'rgba(236,72,153,0.15)',c:'#F472B6'} }
+  const s = m[platform] || { bg:'rgba(148,163,184,0.15)', c:C.muted }
+  return <span style={{ background:s.bg, color:s.c, padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600 }}>{platform}</span>
+}
+
+function StockBadge({ stock, minStock }) {
+  if (stock === 0) return <span style={{ background:'rgba(239,68,68,0.15)', color:'#F87171', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600 }}>🔴 หมด</span>
+  if (stock < minStock) return <span style={{ background:'rgba(234,179,8,0.15)', color:'#FCD34D', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600 }}>🟡 ต่ำ</span>
+  return <span style={{ background:'rgba(16,185,129,0.15)', color:'#34D399', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600 }}>🟢 ปกติ</span>
+}
+
+function LeadTimeBadge({ days }) {
+  if (days <= 7) return <span style={{ background:'rgba(16,185,129,0.15)', color:'#34D399', padding:'2px 8px', borderRadius:20, fontSize:11 }}>{days} วัน (สั้น)</span>
+  if (days <= 14) return <span style={{ background:'rgba(234,179,8,0.15)', color:'#FCD34D', padding:'2px 8px', borderRadius:20, fontSize:11 }}>{days} วัน (กลาง)</span>
+  return <span style={{ background:'rgba(239,68,68,0.15)', color:'#F87171', padding:'2px 8px', borderRadius:20, fontSize:11 }}>{days} วัน (ยาว)</span>
+}
+
+function StatusBadge({ status }) {
+  return status === 'active'
+    ? <span style={{ background:'rgba(16,185,129,0.15)', color:'#34D399', padding:'2px 8px', borderRadius:20, fontSize:11 }}>ใช้งาน</span>
+    : <span style={{ background:'rgba(148,163,184,0.15)', color:C.muted, padding:'2px 8px', borderRadius:20, fontSize:11 }}>ปิด</span>
+}
+
+// ===================== CHARTS =====================
+function DonutChart({ data, colors }) {
+  const total = data.reduce((s,d) => s+d.value, 0)
+  if (total === 0) return <div style={{ textAlign:'center', color:C.muted, padding:40 }}>ไม่มีข้อมูล</div>
+  let cum = 0
+  const slices = data.map((d,i) => {
+    const pct = d.value / total
+    const start = cum, end = cum + pct
+    cum = end
+    const r = 70, cx = 90, cy = 90, inner = 42
+    const a1s = (start*360-90)*Math.PI/180, a1e = (end*360-90)*Math.PI/180
+    const large = (end-start) > 0.5 ? 1 : 0
+    const x1=cx+r*Math.cos(a1s), y1=cy+r*Math.sin(a1s)
+    const x2=cx+r*Math.cos(a1e), y2=cy+r*Math.sin(a1e)
+    const xi1=cx+inner*Math.cos(a1e), yi1=cy+inner*Math.sin(a1e)
+    const xi2=cx+inner*Math.cos(a1s), yi2=cy+inner*Math.sin(a1s)
+    return <path key={i} d={`M${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} L${xi1},${yi1} A${inner},${inner} 0 ${large},0 ${xi2},${yi2} Z`} fill={colors[i%colors.length]} stroke={C.surface} strokeWidth={2} />
+  })
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:20, flexWrap:'wrap' }}>
+      <svg width={180} height={180} viewBox="0 0 180 180">{slices}</svg>
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        {data.map((d,i) => (
+          <div key={i} style={{ display:'flex', alignItems:'center', gap:8, fontSize:13 }}>
+            <div style={{ width:10, height:10, borderRadius:3, background:colors[i%colors.length], flexShrink:0 }} />
+            <span style={{ color:C.muted }}>{d.name}</span>
+            <span style={{ color:C.text, fontWeight:600 }}>{d.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function BarChart({ data }) {
+  if (!data.length) return null
+  const max = Math.max(...data.flatMap(d => [d.revenue||0, d.profit||0]), 1)
+  return (
+    <div style={{ display:'flex', gap:12, height:180, alignItems:'flex-end', paddingTop:16 }}>
+      {data.map((d,i) => (
+        <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
+          <div style={{ width:'100%', display:'flex', gap:3, height:160, alignItems:'flex-end' }}>
+            <div title={`ยอดขาย: ${numFmt(d.revenue)}`} style={{ flex:1, background:'#3B82F6', borderRadius:'4px 4px 0 0', height:`${(d.revenue/max)*100}%`, minHeight:2 }} />
+            <div title={`กำไร: ${numFmt(d.profit)}`} style={{ flex:1, background:'#10B981', borderRadius:'4px 4px 0 0', height:`${(d.profit/max)*100}%`, minHeight:2 }} />
+          </div>
+          <span style={{ fontSize:11, color:C.muted, textAlign:'center' }}>{d.name}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ===================== FORM HELPERS =====================
+function FormGrid({ children }) {
+  return <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>{children}</div>
+}
+function Field({ label, span, children }) {
+  return <div style={{ gridColumn: span===2 ? '1/-1' : undefined }}>
+    <label style={S.label}>{label}</label>
+    {children}
+  </div>
+}
+function Inp({ value, onChange, type='text', placeholder='' }) {
+  return <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+    style={S.input} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border} />
+}
+function Sel({ value, onChange, children }) {
+  return <select value={value} onChange={e=>onChange(e.target.value)} style={S.input}>
+    {children}
+  </select>
+}
+function Textarea({ value, onChange, rows=2 }) {
+  return <textarea value={value} onChange={e=>onChange(e.target.value)} rows={rows}
+    style={{ ...S.input, resize:'none' }} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border} />
+}
+function ModalBtns({ onCancel, onSave }) {
+  return (
+    <div style={{ display:'flex', justifyContent:'flex-end', gap:10, marginTop:20 }}>
+      <button style={S.btn(C.border, C.muted)} onClick={onCancel}>ยกเลิก</button>
+      <button style={S.btn()} onClick={onSave}>💾 บันทึก</button>
+    </div>
+  )
+}
+
+// ===================== STOCK LOG =====================
+function logStock({ type, product_id, product_name, product_sku, qty_change, stock_before, stock_after, note='' }) {
+  const logs = DB.get('stock_logs') || []
+  const id = logs.length > 0 ? Math.max(...logs.map(l=>l.id)) + 1 : 1
+  logs.push({ id, type, product_id, product_name, product_sku, qty_change, stock_before, stock_after, note, created_at: new Date().toISOString() })
+  DB.set('stock_logs', logs)
+}
+
+// ===================== CSV EXPORT =====================
+function downloadCSV(filename, headers, rows) {
+  const csv = '﻿' + [headers, ...rows].map(r => r.map(v => `"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n')
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}))
+  a.download = filename; a.click()
+}
+
+// ===================== SIDEBAR =====================
+function Sidebar({ page, setPage, onSaleOpen, onAddStockOpen, onOrderOpen }) {
+  const [collapsed, setCollapsed] = useState(false)
+  const nav = [
+    { id:'dashboard', icon:'📊', label:'Dashboard' },
+    { id:'stores', icon:'🏪', label:'Store Hub' },
+    { id:'products', icon:'📦', label:'สินค้า' },
+    { id:'team', icon:'👥', label:'ทีมงาน' },
+    { id:'suppliers', icon:'🚚', label:'ซัพพลายเออร์' },
+    { id:'ads', icon:'📣', label:'Ads Tracking' },
+    { id:'orders', icon:'🧾', label:'บันทึกการขาย' },
+    { id:'stocklog', icon:'📋', label:'ประวัติสต็อก' },
+  ]
+  return (
+    <div style={{ width: collapsed?56:208, background:C.surface, borderRight:`1px solid ${C.border}`, display:'flex', flexDirection:'column', transition:'width .25s', flexShrink:0, height:'100vh' }}>
+      <div style={{ padding:'16px 12px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        {!collapsed && <div><div style={{ fontWeight:700, fontSize:13 }}>E-Commerce</div><div style={{ fontSize:11, color:C.muted }}>Manager</div></div>}
+        <button onClick={()=>setCollapsed(!collapsed)} style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:16, marginLeft:'auto', padding:4 }}>
+          {collapsed ? '▶' : '◀'}
+        </button>
+      </div>
+      {/* ปุ่ม Quick Actions */}
+      <div style={{ padding:'8px 8px', borderBottom:`1px solid ${C.border}`, display:'flex', flexDirection:'column', gap:6 }}>
+        <button onClick={onSaleOpen} style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:collapsed?'center':'flex-start', gap:8, padding:'9px 10px', borderRadius:12, border:'none', cursor:'pointer', background:'rgba(16,185,129,0.15)', color:'#34D399', fontFamily:'Sarabun,sans-serif', fontSize:13, fontWeight:700 }}>
+          <span style={{ fontSize:16, flexShrink:0 }}>🛒</span>
+          {!collapsed && <span>ตัดสต็อก</span>}
+        </button>
+        <button onClick={onAddStockOpen} style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:collapsed?'center':'flex-start', gap:8, padding:'9px 10px', borderRadius:12, border:'none', cursor:'pointer', background:'rgba(59,130,246,0.15)', color:'#60A5FA', fontFamily:'Sarabun,sans-serif', fontSize:13, fontWeight:700 }}>
+          <span style={{ fontSize:16, flexShrink:0 }}>📥</span>
+          {!collapsed && <span>เพิ่มสต็อก</span>}
+        </button>
+        <button onClick={onOrderOpen} style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:collapsed?'center':'flex-start', gap:8, padding:'9px 10px', borderRadius:12, border:'none', cursor:'pointer', background:'rgba(168,85,247,0.15)', color:'#C084FC', fontFamily:'Sarabun,sans-serif', fontSize:13, fontWeight:700 }}>
+          <span style={{ fontSize:16, flexShrink:0 }}>📝</span>
+          {!collapsed && <span>บันทึกการขาย</span>}
+        </button>
+      </div>
+      <nav style={{ flex:1, padding:8, display:'flex', flexDirection:'column', gap:2 }}>
+        {nav.map(n => (
+          <button key={n.id} onClick={()=>setPage(n.id)} style={{
+            display:'flex', alignItems:'center', gap:10, padding:'10px 10px',
+            borderRadius:12, border:'none', cursor:'pointer', textAlign:'left', fontFamily:'Sarabun,sans-serif', fontSize:13, fontWeight:500,
+            background: page===n.id ? 'rgba(59,130,246,0.15)' : 'transparent',
+            color: page===n.id ? '#60A5FA' : C.muted,
+            transition:'all .15s',
+          }}>
+            <span style={{ fontSize:16, flexShrink:0 }}>{n.icon}</span>
+            {!collapsed && <span>{n.label}</span>}
+          </button>
+        ))}
+      </nav>
+      <div style={{ padding:'12px', borderTop:`1px solid ${C.border}` }}>
+        {!collapsed && <div style={{ fontSize:11, color:C.border }}>v1.0.0</div>}
+      </div>
+    </div>
+  )
+}
+
+// ===================== DASHBOARD =====================
+function Dashboard() {
+  const [stores, setStores] = useState([])
+  const [products, setProducts] = useState([])
+  const [team, setTeam] = useState([])
+  const [orders, setOrders] = useState([])
+  const [ads, setAds] = useState([])
+
+  useEffect(() => {
+    setStores(CRUD.all('stores'))
+    setProducts(CRUD.all('products'))
+    setTeam(CRUD.all('team'))
+    setOrders(CRUD.all('orders'))
+    setAds(CRUD.all('ads'))
+  }, [])
+
+  const lowStock = products.filter(p => p.stock < p.min_stock)
+
+  // Order metrics
+  const thisMonth = new Date().toISOString().slice(0,7)
+  const monthOrders = orders.filter(o => o.order_date?.startsWith(thisMonth))
+  const monthRevenue = monthOrders.reduce((s,o) => s+o.total_revenue, 0)
+  const monthProfit  = monthOrders.reduce((s,o) => s+o.gross_profit, 0)
+  const activeAds = ads.filter(a => a.status==='active').length
+
+  // Revenue by store (all time)
+  const storeRev = orders.reduce((a,o) => { a[o.store_name]=(a[o.store_name]||0)+o.total_revenue; return a }, {})
+  const storeRevData = Object.entries(storeRev).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([name,revenue])=>({name:name.length>10?name.slice(0,10)+'…':name,revenue}))
+  const maxRev = Math.max(...storeRevData.map(d=>d.revenue),1)
+
+  // Revenue by platform from orders
+  const platRev = orders.reduce((a,o)=>{ a[o.platform]=(a[o.platform]||0)+o.total_revenue; return a },{})
+  const platData = Object.entries(platRev).map(([name,value])=>({name,value}))
+  const COLORS = ['#F97316','#3B82F6','#EC4899','#10B981']
+
+  // Category profit from orders
+  const catProfitMap = orders.reduce((a,o)=>{
+    try { JSON.parse(o.items||'[]').forEach(it=>{ const p=products.find(x=>x.id===it.product_id); const k=catLabel(p?.category||'other'); if(!a[k])a[k]={revenue:0,profit:0}; a[k].revenue+=it.unit_price*it.qty; a[k].profit+=(it.unit_price-it.cost_price)*it.qty }) } catch{}; return a
+  },{})
+  const barData = Object.keys(catProfitMap).length
+    ? Object.entries(catProfitMap).map(([name,v])=>({name,revenue:Math.round(v.revenue),profit:Math.round(v.profit)}))
+    : products.reduce((a,p)=>{ const k=catLabel(p.category); const e=a.find(x=>x.name===k); if(e){e.revenue+=p.selling_price*p.stock;e.profit+=(p.selling_price-p.cost_price)*p.stock}else a.push({name:k,revenue:p.selling_price*p.stock,profit:(p.selling_price-p.cost_price)*p.stock}); return a },[])
+
+  // Recent orders
+  const recentOrders = orders.slice().reverse().slice(0,5)
+
+  const platColor = p => p==='Shopee'?'#FB923C':p==='Facebook'?'#60A5FA':p==='TikTok'?'#F472B6':'#94A3B8'
+
+  return (
+    <div style={{ padding:24, overflowY:'auto', height:'100%', display:'flex', flexDirection:'column', gap:18 }}>
+
+      {/* Row 1: Operations KPIs */}
+      <div>
+        <div style={{fontSize:11,color:C.muted,fontWeight:600,marginBottom:8,textTransform:'uppercase',letterSpacing:1}}>ภาพรวมระบบ</div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
+          {[
+            { label:'ช่องทางทั้งหมด', val:stores.length, icon:'🏪', color:'#3B82F6' },
+            { label:'จำนวน SKU', val:products.length, icon:'📦', color:'#F97316' },
+            { label:'ทีมงาน', val:team.length, icon:'👥', color:'#10B981' },
+            { label:'สต็อกต่ำ/หมด', val:lowStock.length, icon:'⚠️', color:'#EF4444' },
+          ].map(k => (
+            <div key={k.label} style={S.card}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                <span style={{ fontSize:12, color:C.muted }}>{k.label}</span>
+                <div style={{ width:32, height:32, borderRadius:10, background:k.color+'22', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15 }}>{k.icon}</div>
+              </div>
+              <div style={{ fontSize:28, fontWeight:700, color:k.color==='#EF4444'?'#F87171':C.text }}>{k.val}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Row 2: Sales KPIs */}
+      <div>
+        <div style={{fontSize:11,color:C.muted,fontWeight:600,marginBottom:8,textTransform:'uppercase',letterSpacing:1}}>ยอดขายเดือนนี้</div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
+          {[
+            { label:'ออเดอร์เดือนนี้', val:monthOrders.length+' ออเดอร์', icon:'🧾', color:'#A855F7' },
+            { label:'รายได้เดือนนี้', val:'฿'+numFmt(monthRevenue), icon:'💰', color:'#3B82F6' },
+            { label:'กำไรเดือนนี้', val:'฿'+numFmt(monthProfit), icon:'📈', color:'#10B981' },
+            { label:'Ads กำลังยิง', val:activeAds+' แคมเปญ', icon:'📣', color:'#F97316' },
+          ].map(k => (
+            <div key={k.label} style={S.card}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                <span style={{ fontSize:12, color:C.muted }}>{k.label}</span>
+                <div style={{ width:32, height:32, borderRadius:10, background:k.color+'22', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15 }}>{k.icon}</div>
+              </div>
+              <div style={{ fontSize:20, fontWeight:700, color:k.color }}>{k.val}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Row 3: Charts */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+        <div style={S.card}>
+          <div style={{ fontWeight:600, marginBottom:12 }}>รายได้ตาม Platform (ทุกเวลา)</div>
+          {platData.length ? <DonutChart data={platData} colors={COLORS}/> : <div style={{color:C.muted,fontSize:13,textAlign:'center',padding:30}}>ยังไม่มีออเดอร์</div>}
+        </div>
+        <div style={S.card}>
+          <div style={{ fontWeight:600, marginBottom:4 }}>กำไร vs รายได้ต่อหมวด</div>
+          <div style={{ display:'flex', gap:16, marginBottom:8 }}>
+            <span style={{ fontSize:11, color:'#60A5FA' }}>■ รายได้</span>
+            <span style={{ fontSize:11, color:'#34D399' }}>■ กำไร</span>
+          </div>
+          <BarChart data={barData} />
+        </div>
+      </div>
+
+      {/* Row 4: Revenue by store */}
+      {storeRevData.length > 0 && (
+        <div style={S.card}>
+          <div style={{ fontWeight:600, marginBottom:14 }}>รายได้สะสมแต่ละร้าน</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {storeRevData.map((d,i) => (
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ width:120, fontSize:12, color:C.muted, flexShrink:0, textAlign:'right' }}>{d.name}</div>
+                <div style={{ flex:1, height:22, background:C.bg, borderRadius:6, overflow:'hidden' }}>
+                  <div style={{ width:`${(d.revenue/maxRev)*100}%`, height:'100%', background:'#3B82F6', borderRadius:6, minWidth:4 }}/>
+                </div>
+                <div style={{ width:90, fontSize:12, fontWeight:600, textAlign:'right' }}>฿{numFmt(d.revenue)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Row 5: Recent orders + low stock side by side */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+        {/* Recent orders */}
+        <div style={{ ...S.card, padding:0, overflow:'hidden' }}>
+          <div style={{ padding:'14px 18px', borderBottom:`1px solid ${C.border}`, fontWeight:600, fontSize:14 }}>ออเดอร์ล่าสุด</div>
+          {recentOrders.length === 0
+            ? <div style={{ padding:24, textAlign:'center', color:C.muted, fontSize:13 }}>ยังไม่มีออเดอร์</div>
+            : <div style={{ display:'flex', flexDirection:'column' }}>
+                {recentOrders.map(o => (
+                  <div key={o.id} style={{ padding:'10px 18px', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <div>
+                      <div style={{ fontWeight:600, fontSize:13 }}>{o.store_name}</div>
+                      <div style={{ fontSize:11, color:C.muted }}>{o.order_date} · <span style={{ color:platColor(o.platform) }}>{o.platform}</span></div>
+                    </div>
+                    <div style={{ textAlign:'right' }}>
+                      <div style={{ fontWeight:700, color:'#34D399' }}>+฿{numFmt(o.gross_profit)}</div>
+                      <div style={{ fontSize:11, color:C.muted }}>฿{numFmt(o.total_revenue)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+          }
+        </div>
+
+        {/* Low stock */}
+        <div style={{ ...S.card, padding:0, overflow:'hidden', border: lowStock.length>0?'1px solid rgba(239,68,68,0.3)':undefined }}>
+          <div style={{ padding:'14px 18px', borderBottom:`1px solid ${lowStock.length>0?'rgba(239,68,68,0.2)':C.border}`, fontWeight:600, color:lowStock.length>0?'#F87171':C.text, fontSize:14, display:'flex', alignItems:'center', gap:8 }}>
+            {lowStock.length>0?'⚠️':'✅'} สต็อกต่ำ/หมด {lowStock.length>0?`(${lowStock.length} รายการ)`:'— ทุกอย่างปกติ'}
+          </div>
+          {lowStock.length === 0
+            ? <div style={{ padding:24, textAlign:'center', color:C.muted, fontSize:13 }}>สต็อกทุกชิ้นอยู่ในระดับปกติ</div>
+            : <div style={{ maxHeight:220, overflowY:'auto' }}>
+                {lowStock.map(p => (
+                  <div key={p.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 18px', borderBottom:`1px solid ${C.border}` }}>
+                    <div>
+                      <div style={{ fontWeight:500, fontSize:13 }}>{p.name}</div>
+                      <div style={{ fontSize:11, color:C.muted }}>{p.sku}</div>
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <span style={{ fontSize:12, color:C.muted }}>มี {p.stock}/{p.min_stock}</span>
+                      <StockBadge stock={p.stock} minStock={p.min_stock} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+          }
+        </div>
+      </div>
+
+      {/* Store status table */}
+      <div style={{ ...S.card, padding:0, overflow:'hidden' }}>
+        <div style={{ padding:'14px 18px', borderBottom:`1px solid ${C.border}`, fontWeight:600 }}>สถานะช่องทางทั้งหมด</div>
+        <div style={{ overflowX:'auto' }}>
+          <table style={S.table}>
+            <thead><tr>{['ร้าน','Platform','หมวด','ผู้รับผิดชอบ','สถานะ'].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {stores.map(s => (
+                <tr key={s.id}>
+                  <td style={S.td}><span style={{ fontWeight:600 }}>{s.store_name}</span></td>
+                  <td style={S.td}><PlatformBadge platform={s.platform}/></td>
+                  <td style={{ ...S.td, color:C.muted }}>{catLabel(s.category)}</td>
+                  <td style={{ ...S.td, color:C.muted }}>{s.responsible_person}</td>
+                  <td style={S.td}><StatusBadge status={s.status}/></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ===================== STORE HUB =====================
+const emptyStore = () => ({ platform:'Shopee', store_name:'', category:'auto_parts', url:'', username:'', password_hint:'', responsible_person:'', role:'', status:'active', note:'' })
+
+function StoreHub() {
+  const [items, setItems] = useState([])
+  const [pfFilter, setPfFilter] = useState('')
+  const [catFilter, setCatFilter] = useState('')
+  const [stFilter, setStFilter] = useState('')
+  const [modal, setModal] = useState(null)
+  const [form, setForm] = useState(emptyStore())
+  const [editId, setEditId] = useState(null)
+  const [copied, setCopied] = useState(null)
+  const [importOpen, setImportOpen] = useState(false)
+
+  const load = () => setItems(CRUD.all('stores'))
+  useEffect(load, [])
+
+  const filtered = items.filter(s =>
+    (!pfFilter || s.platform===pfFilter) &&
+    (!catFilter || s.category===catFilter) &&
+    (!stFilter || s.status===stFilter)
+  )
+
+  const f = (k,v) => setForm(p => ({...p,[k]:v}))
+  const openAdd = () => { setForm(emptyStore()); setModal('add') }
+  const openEdit = s => { setForm({...s}); setEditId(s.id); setModal('edit') }
+
+  const save = () => {
+    if (!form.store_name.trim()) { addToast('กรุณากรอกชื่อร้าน','error'); return }
+    if (modal==='add') CRUD.add('stores', form)
+    else CRUD.update('stores', editId, form)
+    addToast('บันทึกสำเร็จ'); setModal(null); load()
+  }
+
+  const del = id => {
+    if (!confirm('ลบร้านนี้?')) return
+    CRUD.remove('stores', id); addToast('ลบสำเร็จ'); load()
+  }
+
+  const copy = (id, text) => {
+    navigator.clipboard.writeText(text).catch(()=>{})
+    setCopied(id); setTimeout(()=>setCopied(null), 1500)
+  }
+
+  const inp = 'w-full bg-bg border border-border text-textMain rounded-xl px-3 py-2 text-sm focus:outline-none'
+
+  return (
+    <div style={{ padding:24, overflowY:'auto', height:'100%', display:'flex', flexDirection:'column', gap:16 }}>
+      {/* Filters */}
+      <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
+        {[['pfFilter',setPfFilter,pfFilter,['','Shopee','Facebook','TikTok'],['ทุก Platform','Shopee','Facebook','TikTok']],
+          ['catFilter',setCatFilter,catFilter,['','auto_parts','medical'],['ทุกหมวด','อะไหล่รถ','การแพทย์']],
+          ['stFilter',setStFilter,stFilter,['','active','inactive'],['ทุกสถานะ','ใช้งาน','ปิด']]
+        ].map(([,,val,opts,labels],i) => (
+          <select key={i} value={val} onChange={e=>[setPfFilter,setCatFilter,setStFilter][i](e.target.value)} style={{ ...S.input, width:'auto' }}>
+            {opts.map((o,j) => <option key={j} value={o}>{labels[j]}</option>)}
+          </select>
+        ))}
+        <button style={S.btn(C.border,C.muted)} onClick={()=>setImportOpen(true)}>📂 Import CSV</button>
+        <button style={S.btn(C.border, C.muted)} onClick={()=>downloadCSV('stores.csv',
+          ['ชื่อร้าน','Platform','หมวด','URL','Username','ผู้รับผิดชอบ','บทบาท','สถานะ','หมายเหตุ'],
+          filtered.map(s=>[s.store_name,s.platform,catLabel(s.category),s.url,s.username,s.responsible_person,s.role,s.status,s.note])
+        )}>⬇ Export CSV</button>
+        <button style={{ ...S.btn(), marginLeft:'auto' }} onClick={openAdd}>+ เพิ่มร้าน</button>
+      </div>
+
+      {/* Table */}
+      <div style={{ ...S.card, padding:0, overflow:'hidden', flex:1 }}>
+        <div style={{ overflowX:'auto', height:'100%' }}>
+          <table style={S.table}>
+            <thead>
+              <tr>{['ร้าน','Platform','หมวด','Username','ผู้รับผิดชอบ','สถานะ',''].map(h=><th key={h} style={{...S.th, textAlign:h===''?'right':'left'}}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {filtered.map(s => (
+                <tr key={s.id}>
+                  <td style={S.td}>
+                    <div style={{ fontWeight:600 }}>{s.store_name}</div>
+                    {s.note && <div style={{ fontSize:11, color:C.muted }}>{s.note}</div>}
+                  </td>
+                  <td style={S.td}><PlatformBadge platform={s.platform} /></td>
+                  <td style={{ ...S.td, color:C.muted }}>{catLabel(s.category)}</td>
+                  <td style={S.td}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      <span style={{ fontFamily:'monospace', fontSize:12, color:C.muted }}>{s.username||'-'}</span>
+                      {s.username && <button onClick={()=>copy(s.id,s.username)} style={{ background:'none', border:'none', cursor:'pointer', color: copied===s.id?'#34D399':C.muted, fontSize:12 }}>{copied===s.id?'✓':'⎘'}</button>}
+                    </div>
+                  </td>
+                  <td style={{ ...S.td, color:C.muted }}>{s.responsible_person}</td>
+                  <td style={S.td}><StatusBadge status={s.status} /></td>
+                  <td style={{ ...S.td, textAlign:'right' }}>
+                    <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+                      {s.url && <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color:C.muted, fontSize:14, textDecoration:'none' }}>🔗</a>}
+                      <button onClick={()=>openEdit(s)} style={{ background:'none', border:'none', cursor:'pointer', color:C.muted, fontSize:14 }}>✏️</button>
+                      <button onClick={()=>del(s.id)} style={{ background:'none', border:'none', cursor:'pointer', color:C.muted, fontSize:14 }}>🗑️</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {importOpen && (
+        <ImportModal title="ร้านค้า" columns={[
+          {key:'platform',label:'platform',required:true},{key:'store_name',label:'store_name',required:true},
+          {key:'category',label:'category'},{key:'url',label:'url'},{key:'username',label:'username'},
+          {key:'password_hint',label:'password_hint'},{key:'responsible_person',label:'responsible_person'},
+          {key:'role',label:'role'},{key:'status',label:'status'},{key:'note',label:'note'}
+        ]} onImport={rows=>{
+          rows.forEach(r=>CRUD.add('stores',{platform:r.platform||'Shopee',store_name:r.store_name||'',category:r.category||'auto_parts',url:r.url||'',username:r.username||'',password_hint:r.password_hint||'',responsible_person:r.responsible_person||'',role:r.role||'',status:r.status||'active',note:r.note||''}))
+          load()
+        }} onClose={()=>setImportOpen(false)}/>
+      )}
+      {modal && (
+        <Modal title={modal==='add'?'เพิ่มร้านใหม่':'แก้ไขร้าน'} onClose={()=>setModal(null)} width={600}>
+          <FormGrid>
+            <Field label="Platform *"><Sel value={form.platform} onChange={v=>f('platform',v)}><option>Shopee</option><option>Facebook</option><option>TikTok</option></Sel></Field>
+            <Field label="หมวดสินค้า *"><Sel value={form.category} onChange={v=>f('category',v)}><option value="auto_parts">อะไหล่รถ</option><option value="medical">การแพทย์</option><option value="other">อื่นๆ</option></Sel></Field>
+            <Field label="ชื่อร้าน *" span={2}><Inp value={form.store_name} onChange={v=>f('store_name',v)} /></Field>
+            <Field label="URL" span={2}><Inp value={form.url} onChange={v=>f('url',v)} /></Field>
+            <Field label="Username"><Inp value={form.username} onChange={v=>f('username',v)} /></Field>
+            <Field label="Password Hint"><Inp value={form.password_hint} onChange={v=>f('password_hint',v)} /></Field>
+            <Field label="ผู้รับผิดชอบ"><Inp value={form.responsible_person} onChange={v=>f('responsible_person',v)} /></Field>
+            <Field label="บทบาท"><Inp value={form.role} onChange={v=>f('role',v)} /></Field>
+            <Field label="สถานะ"><Sel value={form.status} onChange={v=>f('status',v)}><option value="active">ใช้งาน</option><option value="inactive">ปิด</option></Sel></Field>
+            <Field label="หมายเหตุ" span={2}><Textarea value={form.note} onChange={v=>f('note',v)} /></Field>
+          </FormGrid>
+          <ModalBtns onCancel={()=>setModal(null)} onSave={save} />
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+// ===================== PRODUCT LIST =====================
+const emptyProduct = () => ({ sku:'', name:'', category:'auto_parts', brand:'', store_ids:'', cost_price:0, selling_price:0, stock:0, min_stock:5, lead_time_days:7, supplier_id:'', status:'active', note:'' })
+
+function ProductList() {
+  const [items, setItems] = useState([])
+  const [suppliers, setSuppliers] = useState([])
+  const [search, setSearch] = useState('')
+  const [catFilter, setCatFilter] = useState('')
+  const [stFilter, setStFilter] = useState('')
+  const [modal, setModal] = useState(null)
+  const [form, setForm] = useState(emptyProduct())
+  const [editId, setEditId] = useState(null)
+  const [stockVal, setStockVal] = useState(0)
+  const [stockEditId, setStockEditId] = useState(null)
+  const [importOpen, setImportOpen] = useState(false)
+
+  const load = () => { setItems(CRUD.all('products')); setSuppliers(CRUD.all('suppliers')) }
+  useEffect(load, [])
+
+  const filtered = items.filter(p => {
+    const q = search.toLowerCase()
+    if (q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q)) return false
+    if (catFilter && p.category !== catFilter) return false
+    if (stFilter === 'out' && p.stock !== 0) return false
+    if (stFilter === 'low' && (p.stock === 0 || p.stock >= p.min_stock)) return false
+    if (stFilter === 'ok' && p.stock < p.min_stock) return false
+    return true
+  })
+
+  const f = (k,v) => setForm(p => ({...p,[k]:v}))
+  const openAdd = () => { setForm(emptyProduct()); setModal('add') }
+  const openEdit = p => { setForm({...p, supplier_id: p.supplier_id||''}); setEditId(p.id); setModal('edit') }
+  const openStock = p => { setStockVal(p.stock); setStockEditId(p.id); setModal('stock') }
+
+  const save = () => {
+    if (!form.sku.trim() || !form.name.trim()) { addToast('กรุณากรอก SKU และชื่อสินค้า','error'); return }
+    const data = { ...form, supplier_id: form.supplier_id ? Number(form.supplier_id) : null }
+    if (modal==='add') {
+      const existing = CRUD.all('products').find(p => p.sku === form.sku)
+      if (existing) { addToast('SKU นี้มีอยู่แล้ว','error'); return }
+      CRUD.add('products', data)
+    } else {
+      CRUD.update('products', editId, data)
+    }
+    addToast('บันทึกสำเร็จ'); setModal(null); load()
+  }
+
+  const saveStock = () => {
+    const p = items.find(x => x.id === stockEditId)
+    const before = p ? p.stock : 0
+    const after = Number(stockVal)
+    CRUD.update('products', stockEditId, { stock: after })
+    if (p) logStock({ type: after >= before ? 'restock' : 'adjust', product_id:p.id, product_name:p.name, product_sku:p.sku, qty_change: after - before, stock_before: before, stock_after: after, note:'อัปเดตสต็อกด้วยมือ' })
+    addToast('อัปเดตสต็อกสำเร็จ'); setModal(null); load()
+  }
+
+  const del = id => {
+    if (!confirm('ลบสินค้านี้?')) return
+    CRUD.remove('products', id); addToast('ลบสำเร็จ'); load()
+  }
+
+  const exportCSV = () => {
+    const h = ['SKU','ชื่อ','หมวด','แบรนด์','ราคาทุน','ราคาขาย','กำไร%','สต็อก','Lead Time','สถานะ']
+    const rows = filtered.map(p => [p.sku,p.name,p.category,p.brand,p.cost_price,p.selling_price,profit(p),p.stock,p.lead_time_days,p.status])
+    const csv = '﻿' + [h,...rows].map(r=>r.join(',')).join('\n')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}))
+    a.download = 'products.csv'; a.click()
+  }
+
+  return (
+    <div style={{ padding:24, overflowY:'auto', height:'100%', display:'flex', flexDirection:'column', gap:16 }}>
+      <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหา SKU / ชื่อสินค้า..."
+          style={{ ...S.input, width:220 }} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border} />
+        <select value={catFilter} onChange={e=>setCatFilter(e.target.value)} style={{ ...S.input, width:'auto' }}>
+          <option value="">ทุกหมวด</option><option value="auto_parts">อะไหล่รถ</option><option value="medical">การแพทย์</option>
+        </select>
+        <select value={stFilter} onChange={e=>setStFilter(e.target.value)} style={{ ...S.input, width:'auto' }}>
+          <option value="">ทุกสต็อก</option><option value="out">หมด</option><option value="low">ต่ำ</option><option value="ok">ปกติ</option>
+        </select>
+        <button style={S.btn(C.border,C.muted)} onClick={()=>setImportOpen(true)}>📂 Import CSV</button>
+        <button style={S.btn(C.border, C.muted)} onClick={()=>downloadCSV('products.csv',
+          ['SKU','ชื่อ','หมวด','แบรนด์','ราคาทุน','ราคาขาย','กำไร%','สต็อก','สต็อกขั้นต่ำ','Lead Time','ซัพพลายเออร์','สถานะ'],
+          filtered.map(p=>[p.sku,p.name,catLabel(p.category),p.brand,p.cost_price,p.selling_price,profit(p),p.stock,p.min_stock,p.lead_time_days,p.supplier_name||'',p.status])
+        )}>⬇ Export CSV</button>
+        <button style={{ ...S.btn(), marginLeft:'auto' }} onClick={openAdd}>+ เพิ่มสินค้า</button>
+      </div>
+
+      <div style={{ ...S.card, padding:0, overflow:'hidden', flex:1 }}>
+        <div style={{ overflowX:'auto', height:'100%' }}>
+          <table style={S.table}>
+            <thead>
+              <tr>{['SKU','ชื่อสินค้า','หมวด','ราคาทุน','ราคาขาย','กำไร%','สต็อก','Lead Time','สถานะ',''].map((h,i)=><th key={i} style={{...S.th,textAlign:['ราคาทุน','ราคาขาย','กำไร%','สต็อก'].includes(h)?'right':h===''?'right':'left'}}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {filtered.map(p => {
+                const pct = profit(p)
+                return (
+                  <tr key={p.id}>
+                    <td style={{ ...S.td, fontFamily:'monospace', fontSize:12, color:C.muted }}>{p.sku}</td>
+                    <td style={S.td}>
+                      <div style={{ fontWeight:600 }}>{p.name}</div>
+                      {p.brand && <div style={{ fontSize:11, color:C.muted }}>{p.brand}</div>}
+                    </td>
+                    <td style={{ ...S.td, color:C.muted }}>{catLabel(p.category)}</td>
+                    <td style={{ ...S.td, textAlign:'right', color:C.muted }}>{numFmt(p.cost_price)}</td>
+                    <td style={{ ...S.td, textAlign:'right' }}>{numFmt(p.selling_price)}</td>
+                    <td style={{ ...S.td, textAlign:'right' }}>
+                      <span style={{ fontWeight:600, color: Number(pct)>=30?'#34D399':'#FCD34D' }}>{pct}%</span>
+                    </td>
+                    <td style={{ ...S.td, textAlign:'right' }}>{p.stock}</td>
+                    <td style={S.td}><span style={{ color:C.muted, fontSize:12 }}>{p.lead_time_days} วัน</span></td>
+                    <td style={S.td}><StockBadge stock={p.stock} minStock={p.min_stock} /></td>
+                    <td style={{ ...S.td, textAlign:'right' }}>
+                      <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+                        <button title="อัปเดตสต็อก" onClick={()=>openStock(p)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:14 }}>🔄</button>
+                        <button onClick={()=>openEdit(p)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:14 }}>✏️</button>
+                        <button onClick={()=>del(p.id)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:14 }}>🗑️</button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {(modal==='add'||modal==='edit') && (
+        <Modal title={modal==='add'?'เพิ่มสินค้าใหม่':'แก้ไขสินค้า'} onClose={()=>setModal(null)} width={640}>
+          <FormGrid>
+            <Field label="SKU *"><Inp value={form.sku} onChange={v=>f('sku',v)} /></Field>
+            <Field label="หมวด *"><Sel value={form.category} onChange={v=>f('category',v)}><option value="auto_parts">อะไหล่รถ</option><option value="medical">การแพทย์</option><option value="other">อื่นๆ</option></Sel></Field>
+            <Field label="ชื่อสินค้า *" span={2}><Inp value={form.name} onChange={v=>f('name',v)} /></Field>
+            <Field label="แบรนด์"><Inp value={form.brand} onChange={v=>f('brand',v)} /></Field>
+            <Field label="ซัพพลายเออร์">
+              <Sel value={form.supplier_id||''} onChange={v=>f('supplier_id',v)}>
+                <option value="">-</option>
+                {suppliers.map(s=><option key={s.id} value={s.id}>{s.company_name}</option>)}
+              </Sel>
+            </Field>
+            <Field label="ราคาทุน"><Inp type="number" value={form.cost_price} onChange={v=>f('cost_price',Number(v))} /></Field>
+            <Field label="ราคาขาย"><Inp type="number" value={form.selling_price} onChange={v=>f('selling_price',Number(v))} /></Field>
+            <Field label="สต็อก"><Inp type="number" value={form.stock} onChange={v=>f('stock',Number(v))} /></Field>
+            <Field label="สต็อกขั้นต่ำ"><Inp type="number" value={form.min_stock} onChange={v=>f('min_stock',Number(v))} /></Field>
+            <Field label="Lead Time (วัน)"><Inp type="number" value={form.lead_time_days} onChange={v=>f('lead_time_days',Number(v))} /></Field>
+            <Field label="สถานะ"><Sel value={form.status} onChange={v=>f('status',v)}><option value="active">ใช้งาน</option><option value="inactive">ไม่ใช้</option></Sel></Field>
+            <Field label="ร้านที่ขาย (ID คั่นด้วย ,)" span={2}><Inp value={form.store_ids} onChange={v=>f('store_ids',v)} /></Field>
+            <Field label="หมายเหตุ" span={2}><Textarea value={form.note} onChange={v=>f('note',v)} /></Field>
+          </FormGrid>
+          <ModalBtns onCancel={()=>setModal(null)} onSave={save} />
+        </Modal>
+      )}
+
+      {modal==='stock' && (
+        <Modal title="อัปเดตสต็อก" onClose={()=>setModal(null)} width={360}>
+          <Field label="จำนวนสต็อกใหม่"><Inp type="number" value={stockVal} onChange={v=>setStockVal(Number(v))} /></Field>
+          <ModalBtns onCancel={()=>setModal(null)} onSave={saveStock} />
+        </Modal>
+      )}
+      {importOpen && (
+        <ImportModal title="สินค้า" columns={[
+          {key:'sku',label:'sku',required:true},{key:'name',label:'name',required:true},{key:'category',label:'category'},
+          {key:'brand',label:'brand'},{key:'cost_price',label:'cost_price'},{key:'selling_price',label:'selling_price'},
+          {key:'stock',label:'stock'},{key:'min_stock',label:'min_stock'},{key:'lead_time_days',label:'lead_time_days'},
+          {key:'status',label:'status'},{key:'note',label:'note'}
+        ]} onImport={rows=>{
+          rows.forEach(r=>{
+            if(CRUD.all('products').find(p=>p.sku===r.sku))return
+            CRUD.add('products',{sku:r.sku||'',name:r.name||'',category:r.category||'auto_parts',brand:r.brand||'',store_ids:'',cost_price:Number(r.cost_price)||0,selling_price:Number(r.selling_price)||0,stock:Number(r.stock)||0,min_stock:Number(r.min_stock)||5,lead_time_days:Number(r.lead_time_days)||7,supplier_id:null,status:r.status||'active',note:r.note||''})
+          }); load()
+        }} onClose={()=>setImportOpen(false)}/>
+      )}
+    </div>
+  )
+}
+
+// ===================== TEAM =====================
+const emptyMember = () => ({ employee_id:'', full_name:'', position:'', assigned_stores:'', responsibilities:'', phone:'', line_id:'', email:'', start_date:'', note:'' })
+const AVATAR_COLORS = ['#3B82F6','#10B981','#F97316','#A855F7','#EC4899','#EAB308']
+
+function TeamPage() {
+  const [items, setItems] = useState([])
+  const [modal, setModal] = useState(null)
+  const [form, setForm] = useState(emptyMember())
+  const [editId, setEditId] = useState(null)
+  const [viewItem, setViewItem] = useState(null)
+  const [importOpen, setImportOpen] = useState(false)
+
+  const load = () => setItems(CRUD.all('team'))
+  useEffect(load, [])
+
+  const f = (k,v) => setForm(p=>({...p,[k]:v}))
+  const openAdd = () => { setForm(emptyMember()); setModal('add') }
+  const openEdit = m => { setForm({...m}); setEditId(m.id); setModal('edit') }
+  const openView = m => { setViewItem(m); setModal('view') }
+
+  const save = () => {
+    if (!form.employee_id.trim()||!form.full_name.trim()) { addToast('กรุณากรอกรหัสพนักงานและชื่อ','error'); return }
+    if (modal==='add') CRUD.add('team',form)
+    else CRUD.update('team',editId,form)
+    addToast('บันทึกสำเร็จ'); setModal(null); load()
+  }
+
+  const del = id => {
+    if (!confirm('ลบพนักงานนี้?')) return
+    CRUD.remove('team',id); addToast('ลบสำเร็จ'); load()
+  }
+
+  return (
+    <div style={{ padding:24, overflowY:'auto', height:'100%', display:'flex', flexDirection:'column', gap:16 }}>
+      <div style={{ display:'flex', justifyContent:'flex-end', gap:10 }}>
+        <button style={S.btn(C.border,C.muted)} onClick={()=>setImportOpen(true)}>📂 Import CSV</button>
+        <button style={S.btn(C.border, C.muted)} onClick={()=>downloadCSV('team.csv',
+          ['รหัส','ชื่อ-นามสกุล','ตำแหน่ง','ช่องทางที่ดูแล','ความรับผิดชอบ','โทรศัพท์','LINE ID','Email','วันเริ่มงาน','หมายเหตุ'],
+          items.map(m=>[m.employee_id,m.full_name,m.position,m.assigned_stores,m.responsibilities,m.phone,m.line_id,m.email,m.start_date,m.note])
+        )}>⬇ Export CSV</button>
+        <button style={S.btn()} onClick={openAdd}>+ เพิ่มพนักงาน</button>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))', gap:14 }}>
+        {items.map((m,i) => (
+          <div key={m.id} onClick={()=>openView(m)} style={{ ...S.card, cursor:'pointer', transition:'border-color .2s' }}
+            onMouseEnter={e=>e.currentTarget.style.borderColor='rgba(59,130,246,0.5)'}
+            onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+            <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ width:46, height:46, borderRadius:14, background:AVATAR_COLORS[i%AVATAR_COLORS.length]+'33', color:AVATAR_COLORS[i%AVATAR_COLORS.length], display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, fontWeight:700 }}>
+                  {m.full_name.charAt(0)}
+                </div>
+                <div>
+                  <div style={{ fontWeight:600 }}>{m.full_name}</div>
+                  <div style={{ fontSize:11, color:C.muted }}>{m.employee_id}</div>
+                </div>
+              </div>
+              <div style={{ display:'flex', gap:4 }} onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>openEdit(m)} style={{ background:'none',border:'none',cursor:'pointer',fontSize:14,color:C.muted }}>✏️</button>
+                <button onClick={()=>del(m.id)} style={{ background:'none',border:'none',cursor:'pointer',fontSize:14,color:C.muted }}>🗑️</button>
+              </div>
+            </div>
+            <div style={{ background:C.bg, borderRadius:10, padding:'6px 10px', fontSize:12, color:C.muted, marginBottom:8, fontWeight:500 }}>{m.position}</div>
+            {m.responsibilities && <p style={{ fontSize:12, color:C.muted, marginBottom:8, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>{m.responsibilities}</p>}
+            <div style={{ display:'flex', gap:12, fontSize:11, color:C.muted }}>
+              {m.phone && <span>📞 {m.phone}</span>}
+              {m.line_id && <span>💬 {m.line_id}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {(modal==='add'||modal==='edit') && (
+        <Modal title={modal==='add'?'เพิ่มพนักงาน':'แก้ไขพนักงาน'} onClose={()=>setModal(null)} width={600}>
+          <FormGrid>
+            <Field label="รหัสพนักงาน *"><Inp value={form.employee_id} onChange={v=>f('employee_id',v)} /></Field>
+            <Field label="ตำแหน่ง *"><Inp value={form.position} onChange={v=>f('position',v)} /></Field>
+            <Field label="ชื่อ-นามสกุล *" span={2}><Inp value={form.full_name} onChange={v=>f('full_name',v)} /></Field>
+            <Field label="โทรศัพท์"><Inp value={form.phone} onChange={v=>f('phone',v)} /></Field>
+            <Field label="LINE ID"><Inp value={form.line_id} onChange={v=>f('line_id',v)} /></Field>
+            <Field label="Email" span={2}><Inp value={form.email} onChange={v=>f('email',v)} /></Field>
+            <Field label="วันเริ่มงาน"><Inp type="date" value={form.start_date} onChange={v=>f('start_date',v)} /></Field>
+            <Field label="ช่องทางที่ดูแล (ID)"><Inp value={form.assigned_stores} onChange={v=>f('assigned_stores',v)} /></Field>
+            <Field label="ความรับผิดชอบ" span={2}><Textarea value={form.responsibilities} onChange={v=>f('responsibilities',v)} /></Field>
+            <Field label="หมายเหตุ" span={2}><Textarea value={form.note} onChange={v=>f('note',v)} /></Field>
+          </FormGrid>
+          <ModalBtns onCancel={()=>setModal(null)} onSave={save} />
+        </Modal>
+      )}
+
+      {modal==='view' && viewItem && (
+        <Modal title="ข้อมูลพนักงาน" onClose={()=>setModal(null)} width={480}>
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {[['รหัสพนักงาน',viewItem.employee_id],['ชื่อ-นามสกุล',viewItem.full_name],['ตำแหน่ง',viewItem.position],
+              ['ช่องทางที่ดูแล',viewItem.assigned_stores],['ความรับผิดชอบ',viewItem.responsibilities],
+              ['โทรศัพท์',viewItem.phone],['LINE ID',viewItem.line_id],['Email',viewItem.email],
+              ['วันเริ่มงาน',viewItem.start_date],['หมายเหตุ',viewItem.note]
+            ].filter(([,v])=>v).map(([k,v])=>(
+              <div key={k} style={{ display:'flex', gap:12 }}>
+                <span style={{ fontSize:12, color:C.muted, width:120, flexShrink:0, paddingTop:2 }}>{k}</span>
+                <span style={{ fontSize:13 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:10, marginTop:20 }}>
+            <button style={S.btn(C.border,C.muted)} onClick={()=>{setModal(null);openEdit(viewItem)}}>✏️ แก้ไข</button>
+            <button style={S.btn()} onClick={()=>setModal(null)}>ปิด</button>
+          </div>
+        </Modal>
+      )}
+      {importOpen && (
+        <ImportModal title="พนักงาน" columns={[
+          {key:'employee_id',label:'employee_id',required:true},{key:'full_name',label:'full_name',required:true},
+          {key:'position',label:'position'},{key:'assigned_stores',label:'assigned_stores'},
+          {key:'responsibilities',label:'responsibilities'},{key:'phone',label:'phone'},
+          {key:'line_id',label:'line_id'},{key:'email',label:'email'},{key:'start_date',label:'start_date'},{key:'note',label:'note'}
+        ]} onImport={rows=>{
+          rows.forEach(r=>{
+            if(CRUD.all('team').find(m=>m.employee_id===r.employee_id))return
+            CRUD.add('team',{employee_id:r.employee_id||'',full_name:r.full_name||'',position:r.position||'',assigned_stores:r.assigned_stores||'',responsibilities:r.responsibilities||'',phone:r.phone||'',line_id:r.line_id||'',email:r.email||'',start_date:r.start_date||'',note:r.note||''})
+          }); load()
+        }} onClose={()=>setImportOpen(false)}/>
+      )}
+    </div>
+  )
+}
+
+// ===================== SUPPLIERS =====================
+const emptySupplier = () => ({ code:'', company_name:'', product_type:'', contact_person:'', phone:'', line_or_email:'', address:'', lead_time_days:7, payment_terms:'', note:'' })
+
+function SupplierList() {
+  const [items, setItems] = useState([])
+  const [search, setSearch] = useState('')
+  const [modal, setModal] = useState(null)
+  const [form, setForm] = useState(emptySupplier())
+  const [editId, setEditId] = useState(null)
+  const [importOpen, setImportOpen] = useState(false)
+
+  const load = () => setItems(CRUD.all('suppliers'))
+  useEffect(load, [])
+
+  const filtered = items.filter(s => {
+    const q = search.toLowerCase()
+    return !q || s.company_name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)
+  })
+
+  const f = (k,v) => setForm(p=>({...p,[k]:v}))
+  const openAdd = () => { setForm(emptySupplier()); setModal('add') }
+  const openEdit = s => { setForm({...s}); setEditId(s.id); setModal('edit') }
+
+  const save = () => {
+    if (!form.code.trim()||!form.company_name.trim()) { addToast('กรุณากรอกรหัสและชื่อบริษัท','error'); return }
+    if (modal==='add') {
+      const existing = CRUD.all('suppliers').find(s=>s.code===form.code)
+      if (existing) { addToast('รหัสนี้มีอยู่แล้ว','error'); return }
+      CRUD.add('suppliers',form)
+    } else CRUD.update('suppliers',editId,form)
+    addToast('บันทึกสำเร็จ'); setModal(null); load()
+  }
+
+  const del = id => {
+    if (!confirm('ลบซัพพลายเออร์นี้?')) return
+    CRUD.remove('suppliers',id); addToast('ลบสำเร็จ'); load()
+  }
+
+  return (
+    <div style={{ padding:24, overflowY:'auto', height:'100%', display:'flex', flexDirection:'column', gap:16 }}>
+      <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหาบริษัท / รหัส..."
+          style={{ ...S.input, width:260 }} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border} />
+        <button style={S.btn(C.border,C.muted)} onClick={()=>setImportOpen(true)}>📂 Import CSV</button>
+        <button style={S.btn(C.border, C.muted)} onClick={()=>downloadCSV('suppliers.csv',
+          ['รหัส','บริษัท','ประเภทสินค้า','ผู้ติดต่อ','โทรศัพท์','LINE/Email','ที่อยู่','Lead Time (วัน)','เงื่อนไขชำระ','หมายเหตุ'],
+          filtered.map(s=>[s.code,s.company_name,s.product_type,s.contact_person,s.phone,s.line_or_email,s.address,s.lead_time_days,s.payment_terms,s.note])
+        )}>⬇ Export CSV</button>
+        <button style={{ ...S.btn(), marginLeft:'auto' }} onClick={openAdd}>+ เพิ่มซัพพลายเออร์</button>
+      </div>
+
+      <div style={{ ...S.card, padding:0, overflow:'hidden', flex:1 }}>
+        <div style={{ overflowX:'auto', height:'100%' }}>
+          <table style={S.table}>
+            <thead>
+              <tr>{['รหัส','บริษัท','ประเภทสินค้า','ผู้ติดต่อ','ช่องทาง','Lead Time','เงื่อนไขชำระ',''].map(h=><th key={h} style={{...S.th,textAlign:h===''?'right':'left'}}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {filtered.map(s => (
+                <tr key={s.id}>
+                  <td style={{ ...S.td, fontFamily:'monospace', fontSize:12, color:C.muted }}>{s.code}</td>
+                  <td style={S.td}>
+                    <div style={{ fontWeight:600 }}>{s.company_name}</div>
+                    {s.address && <div style={{ fontSize:11, color:C.muted }}>{s.address}</div>}
+                  </td>
+                  <td style={{ ...S.td, color:C.muted }}>{s.product_type}</td>
+                  <td style={S.td}>
+                    <div>{s.contact_person}</div>
+                    {s.phone && <div style={{ fontSize:11, color:C.muted }}>{s.phone}</div>}
+                  </td>
+                  <td style={{ ...S.td, fontSize:12, color:C.muted }}>{s.line_or_email}</td>
+                  <td style={S.td}><LeadTimeBadge days={s.lead_time_days} /></td>
+                  <td style={{ ...S.td, fontSize:12, color:C.muted }}>{s.payment_terms}</td>
+                  <td style={{ ...S.td, textAlign:'right' }}>
+                    <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+                      <button onClick={()=>openEdit(s)} style={{ background:'none',border:'none',cursor:'pointer',fontSize:14 }}>✏️</button>
+                      <button onClick={()=>del(s.id)} style={{ background:'none',border:'none',cursor:'pointer',fontSize:14 }}>🗑️</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {modal && (
+        <Modal title={modal==='add'?'เพิ่มซัพพลายเออร์':'แก้ไขซัพพลายเออร์'} onClose={()=>setModal(null)} width={600}>
+          <FormGrid>
+            <Field label="รหัส *"><Inp value={form.code} onChange={v=>f('code',v)} /></Field>
+            <Field label="ประเภทสินค้า"><Inp value={form.product_type} onChange={v=>f('product_type',v)} /></Field>
+            <Field label="ชื่อบริษัท *" span={2}><Inp value={form.company_name} onChange={v=>f('company_name',v)} /></Field>
+            <Field label="ผู้ติดต่อ"><Inp value={form.contact_person} onChange={v=>f('contact_person',v)} /></Field>
+            <Field label="โทรศัพท์"><Inp value={form.phone} onChange={v=>f('phone',v)} /></Field>
+            <Field label="LINE / Email" span={2}><Inp value={form.line_or_email} onChange={v=>f('line_or_email',v)} /></Field>
+            <Field label="Lead Time (วัน)"><Inp type="number" value={form.lead_time_days} onChange={v=>f('lead_time_days',Number(v))} /></Field>
+            <Field label="เงื่อนไขการชำระ"><Inp value={form.payment_terms} onChange={v=>f('payment_terms',v)} /></Field>
+            <Field label="ที่อยู่" span={2}><Inp value={form.address} onChange={v=>f('address',v)} /></Field>
+            <Field label="หมายเหตุ" span={2}><Textarea value={form.note} onChange={v=>f('note',v)} /></Field>
+          </FormGrid>
+          <ModalBtns onCancel={()=>setModal(null)} onSave={save} />
+        </Modal>
+      )}
+      {importOpen && (
+        <ImportModal title="ซัพพลายเออร์" columns={[
+          {key:'code',label:'code',required:true},{key:'company_name',label:'company_name',required:true},
+          {key:'product_type',label:'product_type'},{key:'contact_person',label:'contact_person'},
+          {key:'phone',label:'phone'},{key:'line_or_email',label:'line_or_email'},
+          {key:'address',label:'address'},{key:'lead_time_days',label:'lead_time_days'},
+          {key:'payment_terms',label:'payment_terms'},{key:'note',label:'note'}
+        ]} onImport={rows=>{
+          rows.forEach(r=>{
+            if(CRUD.all('suppliers').find(s=>s.code===r.code))return
+            CRUD.add('suppliers',{code:r.code||'',company_name:r.company_name||'',product_type:r.product_type||'',contact_person:r.contact_person||'',phone:r.phone||'',line_or_email:r.line_or_email||'',address:r.address||'',lead_time_days:Number(r.lead_time_days)||7,payment_terms:r.payment_terms||'',note:r.note||''})
+          }); load()
+        }} onClose={()=>setImportOpen(false)}/>
+      )}
+    </div>
+  )
+}
+
+// ===================== ADD STOCK MODAL =====================
+function AddStockModal({ onClose }) {
+  const [allProducts] = useState(() => CRUD.all('products').filter(p=>p.status==='active'))
+  const [lines, setLines] = useState([{ product_id:'', qty:1, note:'' }])
+  const [search, setSearch] = useState('')
+  const visible = search ? allProducts.filter(p=>p.name.toLowerCase().includes(search.toLowerCase())||p.sku.toLowerCase().includes(search.toLowerCase())) : allProducts
+  const getP = id => allProducts.find(p=>p.id===Number(id))
+  const addLine = () => setLines(p=>[...p,{product_id:'',qty:1,note:''}])
+  const removeLine = i => setLines(p=>p.filter((_,j)=>j!==i))
+  const upd = (i,k,v) => setLines(p=>p.map((l,j)=>j===i?{...l,[k]:v}:l))
+  const confirm = () => {
+    const valid = lines.filter(l=>l.product_id&&Number(l.qty)>0)
+    if (!valid.length) { addToast('กรุณาเลือกสินค้าและจำนวน','error'); return }
+    valid.forEach(l => {
+      const p = getP(l.product_id)
+      if (p) {
+        const ns = p.stock + Number(l.qty)
+        CRUD.update('products', p.id, { stock: ns })
+        logStock({ type:'restock', product_id:p.id, product_name:p.name, product_sku:p.sku, qty_change:Number(l.qty), stock_before:p.stock, stock_after:ns, note:l.note||'เพิ่มสต็อก' })
+      }
+    })
+    addToast(`✓ เพิ่มสต็อกสำเร็จ ${valid.length} รายการ`); onClose()
+  }
+  return (
+    <Modal title="📥 เพิ่มสต็อก" onClose={onClose} width={680}>
+      <div style={{marginBottom:12}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 กรองสินค้า (SKU / ชื่อ)..." style={{...S.input,fontSize:12}} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border}/>
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:12}}>
+        {lines.map((line,i)=>{
+          const p=getP(line.product_id), ns=p?p.stock+Number(line.qty):null
+          return (
+            <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 80px 1fr auto',gap:8,alignItems:'center',background:C.bg,padding:'10px 12px',borderRadius:12,border:`1px solid ${C.border}`}}>
+              <select value={line.product_id} onChange={e=>upd(i,'product_id',e.target.value)} style={{...S.input,fontSize:12}}>
+                <option value="">-- เลือกสินค้า --</option>
+                {visible.map(pr=><option key={pr.id} value={pr.id}>{pr.sku} — {pr.name} (มี:{pr.stock})</option>)}
+              </select>
+              <input type="number" min="1" value={line.qty} onChange={e=>upd(i,'qty',e.target.value)} placeholder="จำนวน" style={{...S.input,textAlign:'center'}} onFocus={e=>e.target.style.borderColor='#34D399'} onBlur={e=>e.target.style.borderColor=C.border}/>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <input value={line.note} onChange={e=>upd(i,'note',e.target.value)} placeholder="หมายเหตุ (เช่น PO#001)" style={{...S.input,fontSize:12}} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border}/>
+                {p&&<span style={{fontSize:12,whiteSpace:'nowrap',color:C.muted}}>{p.stock}<span style={{color:C.border}}> → </span><b style={{color:'#34D399'}}>{ns}</b></span>}
+              </div>
+              <button onClick={()=>removeLine(i)} style={{background:'none',border:'none',cursor:'pointer',color:'#F87171',fontSize:18,padding:'0 4px'}}>×</button>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:4}}>
+        <button onClick={addLine} style={S.btn(C.border,C.muted)}>+ เพิ่มสินค้า</button>
+        <div style={{display:'flex',gap:10}}>
+          <button style={S.btn(C.border,C.muted)} onClick={onClose}>ยกเลิก</button>
+          <button style={S.btn('#10B981')} onClick={confirm}>📥 ยืนยันเพิ่มสต็อก</button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ===================== IMPORT CSV MODAL =====================
+function ImportModal({ title, columns, onImport, onClose }) {
+  const [text, setText] = useState('')
+  const [preview, setPreview] = useState([])
+  const [errors, setErrors] = useState([])
+  const [file, setFile] = useState(null)
+
+  const parseCSV = raw => {
+    const lines = raw.trim().split('\n').map(l=>l.trim()).filter(Boolean)
+    if (lines.length < 2) return []
+    const headers = lines[0].replace(/^﻿/,'').split(',').map(h=>h.replace(/^"|"$/g,'').trim())
+    return lines.slice(1).map((line,ri) => {
+      const vals = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,)|(?<=,)$)/g)||[]
+      const row = {}
+      headers.forEach((h,i)=>{ row[h] = (vals[i]||'').replace(/^"|"$/g,'').trim() })
+      return row
+    })
+  }
+
+  const handleText = raw => {
+    setText(raw)
+    const rows = parseCSV(raw)
+    const errs = []
+    columns.filter(c=>c.required).forEach(c=>{
+      rows.forEach((r,i)=>{ if (!r[c.label]&&!r[c.key]) errs.push(`แถว ${i+2}: ไม่มีข้อมูล "${c.label}"`) })
+    })
+    setErrors(errs)
+    setPreview(rows.slice(0,5))
+  }
+
+  const handleFile = e => {
+    const f = e.target.files[0]
+    if (!f) return
+    setFile(f.name)
+    const reader = new FileReader()
+    reader.onload = ev => handleText(ev.target.result)
+    reader.readAsText(f, 'UTF-8')
+  }
+
+  const doImport = () => {
+    const rows = parseCSV(text)
+    if (!rows.length) { addToast('ไม่พบข้อมูลในไฟล์','error'); return }
+    onImport(rows)
+    addToast(`นำเข้า ${rows.length} รายการสำเร็จ`)
+    onClose()
+  }
+
+  const templateLine = columns.map(c=>c.label).join(',')
+
+  return (
+    <Modal title={`📂 นำเข้า CSV — ${title}`} onClose={onClose} width={700}>
+      <div style={{marginBottom:14,background:C.bg,borderRadius:12,padding:'10px 14px',border:`1px solid ${C.border}`}}>
+        <div style={{fontSize:12,color:'#34D399',fontWeight:600,marginBottom:4}}>รูปแบบคอลัมน์ที่รองรับ:</div>
+        <code style={{fontSize:11,color:C.muted,wordBreak:'break-all'}}>{templateLine}</code>
+        <button onClick={()=>downloadCSV(`template_${title}.csv`,[columns.map(c=>c.label)],[])} style={{...S.btn(C.border,C.muted),fontSize:11,marginTop:8}}>⬇ ดาวน์โหลด Template</button>
+      </div>
+      <div style={{display:'flex',gap:10,marginBottom:12,alignItems:'center'}}>
+        <label style={{...S.btn('#334155','#94A3B8'),cursor:'pointer',fontSize:12}}>
+          📎 เลือกไฟล์ .csv
+          <input type="file" accept=".csv,.txt" onChange={handleFile} style={{display:'none'}}/>
+        </label>
+        {file && <span style={{fontSize:12,color:'#34D399'}}>✓ {file}</span>}
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={S.label}>หรือวาง CSV text ที่นี่:</label>
+        <textarea value={text} onChange={e=>handleText(e.target.value)} rows={5} placeholder={`${templateLine}\n(วางข้อมูล CSV ที่นี่)`}
+          style={{...S.input,resize:'vertical',fontFamily:'monospace',fontSize:12}} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border}/>
+      </div>
+      {errors.length>0 && (
+        <div style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:10,padding:'8px 12px',marginBottom:10}}>
+          {errors.slice(0,3).map((e,i)=><div key={i} style={{fontSize:12,color:'#F87171'}}>⚠ {e}</div>)}
+          {errors.length>3 && <div style={{fontSize:12,color:'#F87171'}}>...และอีก {errors.length-3} รายการ</div>}
+        </div>
+      )}
+      {preview.length>0 && (
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:12,color:C.muted,marginBottom:6}}>ตัวอย่าง {preview.length} แถวแรก:</div>
+          <div style={{overflowX:'auto',border:`1px solid ${C.border}`,borderRadius:10}}>
+            <table style={{...S.table,fontSize:11}}>
+              <thead><tr>{Object.keys(preview[0]).map(k=><th key={k} style={{...S.th,padding:'6px 10px'}}>{k}</th>)}</tr></thead>
+              <tbody>{preview.map((r,i)=><tr key={i}>{Object.values(r).map((v,j)=><td key={j} style={{...S.td,padding:'6px 10px',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v}</td>)}</tr>)}</tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      <div style={{display:'flex',justifyContent:'flex-end',gap:10}}>
+        <button style={S.btn(C.border,C.muted)} onClick={onClose}>ยกเลิก</button>
+        <button style={S.btn()} onClick={doImport} disabled={!text.trim()}>📂 นำเข้าข้อมูล ({parseCSV(text).length} แถว)</button>
+      </div>
+    </Modal>
+  )
+}
+
+// ===================== SALES ORDER MODAL =====================
+function OrderModal({ onClose, onSaved }) {
+  const [stores] = useState(()=>CRUD.all('stores'))
+  const [allProducts] = useState(()=>CRUD.all('products').filter(p=>p.status==='active'))
+  const [date, setDate] = useState(new Date().toISOString().slice(0,10))
+  const [storeId, setStoreId] = useState('')
+  const [note, setNote] = useState('')
+  const [items, setItems] = useState([{product_id:'',qty:1,unit_price:0,cost_price:0}])
+  const [search, setSearch] = useState('')
+
+  const visible = search ? allProducts.filter(p=>p.name.toLowerCase().includes(search.toLowerCase())||p.sku.toLowerCase().includes(search.toLowerCase())) : allProducts
+  const getP = id => allProducts.find(p=>p.id===Number(id))
+  const selStore = stores.find(s=>s.id===Number(storeId))
+
+  const updItem = (i,k,v) => setItems(p=>p.map((l,j)=>j===i?{...l,[k]:v}:l))
+  const addItem = () => setItems(p=>[...p,{product_id:'',qty:1,unit_price:0,cost_price:0}])
+  const removeItem = i => setItems(p=>p.filter((_,j)=>j!==i))
+
+  const handleSelectProduct = (i, pid) => {
+    const p = getP(pid)
+    updItem(i,'product_id',pid)
+    if (p) { updItem(i,'unit_price',p.selling_price); setTimeout(()=>updItem(i,'cost_price',p.cost_price),0) }
+  }
+
+  // ใช้ functional update ที่ถูกต้อง
+  const handleSelectProductFull = (i, pid) => {
+    const p = getP(pid)
+    setItems(prev => prev.map((l,j) => j===i ? {...l, product_id:pid, unit_price:p?p.selling_price:0, cost_price:p?p.cost_price:0} : l))
+  }
+
+  const totalRevenue = items.reduce((s,i)=>s+Number(i.qty)*Number(i.unit_price),0)
+  const totalCost = items.reduce((s,i)=>s+Number(i.qty)*Number(i.cost_price),0)
+  const grossProfit = totalRevenue - totalCost
+  const margin = totalRevenue>0 ? (grossProfit/totalRevenue*100).toFixed(1) : '0'
+
+  const confirm = () => {
+    if (!storeId) { addToast('กรุณาเลือกร้านที่ขาย','error'); return }
+    const valid = items.filter(i=>i.product_id&&Number(i.qty)>0)
+    if (!valid.length) { addToast('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ','error'); return }
+    const itemDetails = valid.map(i=>{
+      const p=getP(i.product_id)
+      return {product_id:p.id,product_name:p.name,sku:p.sku,qty:Number(i.qty),unit_price:Number(i.unit_price),cost_price:Number(i.cost_price)}
+    })
+    CRUD.add('orders',{order_date:date,store_id:Number(storeId),store_name:selStore?.store_name||'',platform:selStore?.platform||'',items:JSON.stringify(itemDetails),total_revenue:totalRevenue,total_cost:totalCost,gross_profit:grossProfit,note})
+    valid.forEach(i=>{
+      const p=getP(i.product_id)
+      if (p) {
+        const ns=Math.max(0,p.stock-Number(i.qty))
+        CRUD.update('products',p.id,{stock:ns})
+        logStock({type:'sale',product_id:p.id,product_name:p.name,product_sku:p.sku,qty_change:-Number(i.qty),stock_before:p.stock,stock_after:ns,note:`ขาย: ${selStore?.store_name||''} (${date})`})
+        // update local for subsequent items
+        p.stock = ns
+      }
+    })
+    addToast(`✓ บันทึกการขายสำเร็จ ยอด ฿${numFmt(totalRevenue)}`)
+    onSaved?.(); onClose()
+  }
+
+  return (
+    <Modal title="📝 บันทึกการขาย" onClose={onClose} width={780}>
+      {/* Header */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:16}}>
+        <div><label style={S.label}>วันที่ขาย *</label>
+          <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={S.input} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border}/>
+        </div>
+        <div><label style={S.label}>ร้านที่ขาย *</label>
+          <select value={storeId} onChange={e=>setStoreId(e.target.value)} style={S.input}>
+            <option value="">-- เลือกร้าน --</option>
+            {stores.map(s=><option key={s.id} value={s.id}>[{s.platform}] {s.store_name}</option>)}
+          </select>
+        </div>
+        <div><label style={S.label}>หมายเหตุ</label>
+          <input value={note} onChange={e=>setNote(e.target.value)} placeholder="เช่น Order#1234" style={S.input} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border}/>
+        </div>
+      </div>
+      {/* Filter products */}
+      <div style={{marginBottom:10}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 กรองสินค้าในตัวเลือก..." style={{...S.input,fontSize:12}} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border}/>
+      </div>
+      {/* Items table */}
+      <div style={{border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
+        <table style={{...S.table,fontSize:12}}>
+          <thead>
+            <tr>
+              {['สินค้า','จำนวน','ราคาขาย/หน่วย','ราคาทุน/หน่วย','รวมรายได้','กำไร',''].map(h=>(
+                <th key={h} style={{...S.th,padding:'8px 10px',textAlign:['จำนวน','ราคาขาย/หน่วย','ราคาทุน/หน่วย','รวมรายได้','กำไร'].includes(h)?'right':'left'}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item,i)=>{
+              const p=getP(item.product_id)
+              const rev=Number(item.qty)*Number(item.unit_price)
+              const cost=Number(item.qty)*Number(item.cost_price)
+              const gp=rev-cost
+              const stockOk=!p||p.stock>=Number(item.qty)
+              return (
+                <tr key={i} style={{background:!stockOk?'rgba(239,68,68,0.05)':''}}>
+                  <td style={{...S.td,padding:'8px 10px'}}>
+                    <select value={item.product_id} onChange={e=>handleSelectProductFull(i,e.target.value)} style={{...S.input,fontSize:12,padding:'6px 8px'}}>
+                      <option value="">-- เลือกสินค้า --</option>
+                      {visible.map(pr=><option key={pr.id} value={pr.id}>{pr.sku} — {pr.name}</option>)}
+                    </select>
+                    {p&&<div style={{fontSize:10,color:stockOk?C.muted:'#F87171',marginTop:2}}>คงเหลือ: {p.stock} ชิ้น{!stockOk?' ⚠ สต็อกไม่พอ':''}</div>}
+                  </td>
+                  <td style={{...S.td,padding:'8px 6px'}}><input type="number" min="1" value={item.qty} onChange={e=>updItem(i,'qty',e.target.value)} style={{...S.input,width:60,textAlign:'center',padding:'6px 4px'}} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border}/></td>
+                  <td style={{...S.td,padding:'8px 6px'}}><input type="number" value={item.unit_price} onChange={e=>updItem(i,'unit_price',e.target.value)} style={{...S.input,width:90,textAlign:'right',padding:'6px 8px'}} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border}/></td>
+                  <td style={{...S.td,padding:'8px 6px'}}><input type="number" value={item.cost_price} onChange={e=>updItem(i,'cost_price',e.target.value)} style={{...S.input,width:90,textAlign:'right',padding:'6px 8px'}} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border}/></td>
+                  <td style={{...S.td,padding:'8px 10px',textAlign:'right',fontWeight:600}}>{numFmt(rev)}</td>
+                  <td style={{...S.td,padding:'8px 10px',textAlign:'right',fontWeight:600,color:gp>=0?'#34D399':'#F87171'}}>{numFmt(gp)}</td>
+                  <td style={{...S.td,padding:'8px 6px'}}><button onClick={()=>removeItem(i)} style={{background:'none',border:'none',cursor:'pointer',color:'#F87171',fontSize:16}}>×</button></td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:16}}>
+        <button onClick={addItem} style={S.btn(C.border,C.muted)}>+ เพิ่มสินค้า</button>
+        <div style={{display:'flex',gap:20,background:C.bg,padding:'10px 16px',borderRadius:12,border:`1px solid ${C.border}`}}>
+          <div style={{textAlign:'right'}}><div style={{fontSize:11,color:C.muted}}>รายได้รวม</div><div style={{fontSize:18,fontWeight:700,color:'#60A5FA'}}>฿{numFmt(totalRevenue)}</div></div>
+          <div style={{textAlign:'right'}}><div style={{fontSize:11,color:C.muted}}>ต้นทุนรวม</div><div style={{fontSize:18,fontWeight:700,color:'#F87171'}}>฿{numFmt(totalCost)}</div></div>
+          <div style={{textAlign:'right'}}><div style={{fontSize:11,color:C.muted}}>กำไรขั้นต้น ({margin}%)</div><div style={{fontSize:18,fontWeight:700,color:'#34D399'}}>฿{numFmt(grossProfit)}</div></div>
+        </div>
+      </div>
+      <div style={{display:'flex',justifyContent:'flex-end',gap:10}}>
+        <button style={S.btn(C.border,C.muted)} onClick={onClose}>ยกเลิก</button>
+        <button style={S.btn('#3B82F6')} onClick={confirm}>✓ บันทึกและตัดสต็อก</button>
+      </div>
+    </Modal>
+  )
+}
+
+// ===================== ORDERS PAGE =====================
+function OrdersPage() {
+  const [orders, setOrders] = useState([])
+  const [stores] = useState(()=>CRUD.all('stores'))
+  const [storeFilter, setStoreFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [search, setSearch] = useState('')
+  const [orderModal, setOrderModal] = useState(false)
+  const [viewOrder, setViewOrder] = useState(null)
+
+  const load = () => setOrders(CRUD.all('orders').slice().reverse())
+  useEffect(load,[])
+
+  const filtered = orders.filter(o=>{
+    if (storeFilter && String(o.store_id)!==storeFilter) return false
+    if (dateFrom && o.order_date < dateFrom) return false
+    if (dateTo && o.order_date > dateTo) return false
+    if (search) { const q=search.toLowerCase(); if (!o.store_name.toLowerCase().includes(q)&&!o.note?.toLowerCase().includes(q)) return false }
+    return true
+  })
+
+  const totalRev = filtered.reduce((s,o)=>s+o.total_revenue,0)
+  const totalProfit = filtered.reduce((s,o)=>s+o.gross_profit,0)
+  const margin = totalRev>0?(totalProfit/totalRev*100).toFixed(1):'0'
+
+  const platColor = p => p==='Shopee'?'#FB923C':p==='Facebook'?'#60A5FA':p==='TikTok'?'#F472B6':'#94A3B8'
+
+  return (
+    <div style={{padding:24,overflowY:'auto',height:'100%',display:'flex',flexDirection:'column',gap:16}}>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 ค้นหาร้าน / หมายเหตุ..." style={{...S.input,width:200}} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border}/>
+        <select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} style={{...S.input,width:'auto'}}>
+          <option value="">ทุกร้าน</option>
+          {stores.map(s=><option key={s.id} value={s.id}>{s.store_name}</option>)}
+        </select>
+        <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:C.muted}}>
+          <span>จาก</span><input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={{...S.input,width:130,fontSize:12}}/>
+          <span>ถึง</span><input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={{...S.input,width:130,fontSize:12}}/>
+        </div>
+        <button style={S.btn(C.border,C.muted)} onClick={()=>downloadCSV('orders.csv',
+          ['เลขที่','วันที่','ร้าน','Platform','รายได้','ต้นทุน','กำไร','หมายเหตุ'],
+          filtered.map(o=>[o.id,o.order_date,o.store_name,o.platform,o.total_revenue,o.total_cost,o.gross_profit,o.note])
+        )}>⬇ Export CSV</button>
+        <button style={{...S.btn('#3B82F6'),marginLeft:'auto'}} onClick={()=>setOrderModal(true)}>📝 บันทึกการขาย</button>
+      </div>
+
+      {/* Summary row */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14}}>
+        {[{label:'จำนวนออเดอร์',val:filtered.length,icon:'🧾',color:'#3B82F6'},{label:'รายได้รวม',val:'฿'+numFmt(totalRev),icon:'💰',color:'#F97316'},{label:`กำไร (${margin}%)`,val:'฿'+numFmt(totalProfit),icon:'📈',color:'#10B981'}].map(k=>(
+          <div key={k.label} style={S.card}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+              <span style={{fontSize:12,color:C.muted}}>{k.label}</span>
+              <span style={{fontSize:18}}>{k.icon}</span>
+            </div>
+            <div style={{fontSize:24,fontWeight:700,color:k.color}}>{k.val}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{...S.card,padding:0,overflow:'hidden',flex:1}}>
+        <div style={{overflowX:'auto',height:'100%'}}>
+          <table style={S.table}>
+            <thead><tr>
+              {['#','วันที่','ร้าน','สินค้า','รายได้','ต้นทุน','กำไร','หมายเหตุ',''].map(h=>(
+                <th key={h} style={{...S.th,textAlign:['รายได้','ต้นทุน','กำไร'].includes(h)?'right':'left'}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {filtered.length===0&&<tr><td colSpan={9} style={{...S.td,textAlign:'center',color:C.muted,padding:40}}>ยังไม่มีรายการขาย — กด "บันทึกการขาย" เพื่อเริ่ม</td></tr>}
+              {filtered.map(o=>{
+                const its=JSON.parse(o.items||'[]')
+                return (
+                  <tr key={o.id} style={{cursor:'pointer'}} onClick={()=>setViewOrder(o)}>
+                    <td style={{...S.td,color:C.muted,fontSize:12}}>#{o.id}</td>
+                    <td style={{...S.td,fontSize:12,whiteSpace:'nowrap'}}>{o.order_date}</td>
+                    <td style={S.td}>
+                      <div style={{fontWeight:600}}>{o.store_name}</div>
+                      <span style={{fontSize:10,padding:'1px 6px',borderRadius:20,background:`${platColor(o.platform)}22`,color:platColor(o.platform)}}>{o.platform}</span>
+                    </td>
+                    <td style={{...S.td,fontSize:12,color:C.muted,maxWidth:180}}>
+                      {its.slice(0,2).map(it=><div key={it.product_id} style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.sku} ×{it.qty}</div>)}
+                      {its.length>2&&<div style={{color:C.border}}>+{its.length-2} รายการ</div>}
+                    </td>
+                    <td style={{...S.td,textAlign:'right',fontWeight:600}}>฿{numFmt(o.total_revenue)}</td>
+                    <td style={{...S.td,textAlign:'right',color:C.muted}}>฿{numFmt(o.total_cost)}</td>
+                    <td style={{...S.td,textAlign:'right',fontWeight:700,color:'#34D399'}}>฿{numFmt(o.gross_profit)}</td>
+                    <td style={{...S.td,fontSize:12,color:C.muted}}>{o.note}</td>
+                    <td style={S.td}><button onClick={e=>{e.stopPropagation();if(!confirm('ลบออเดอร์นี้?'))return;CRUD.remove('orders',o.id);addToast('ลบสำเร็จ');load()}} style={{background:'none',border:'none',cursor:'pointer',fontSize:14}}>🗑️</button></td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {orderModal && <OrderModal onClose={()=>setOrderModal(false)} onSaved={load}/>}
+      {viewOrder && (
+        <Modal title={`รายละเอียดออเดอร์ #${viewOrder.id}`} onClose={()=>setViewOrder(null)} width={600}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:16}}>
+            {[['วันที่',viewOrder.order_date],['ร้าน',viewOrder.store_name],['Platform',viewOrder.platform]].map(([k,v])=>(
+              <div key={k} style={{background:C.bg,borderRadius:10,padding:'8px 12px'}}><div style={{fontSize:11,color:C.muted}}>{k}</div><div style={{fontWeight:600}}>{v}</div></div>
+            ))}
+          </div>
+          <table style={{...S.table,marginBottom:14,fontSize:13}}>
+            <thead><tr>{['SKU','สินค้า','จำนวน','ราคาขาย','ราคาทุน','กำไร'].map(h=><th key={h} style={{...S.th,textAlign:['จำนวน','ราคาขาย','ราคาทุน','กำไร'].includes(h)?'right':'left'}}>{h}</th>)}</tr></thead>
+            <tbody>
+              {JSON.parse(viewOrder.items||'[]').map((it,i)=>(
+                <tr key={i}>
+                  <td style={{...S.td,fontFamily:'monospace',fontSize:11,color:C.muted}}>{it.sku}</td>
+                  <td style={S.td}>{it.product_name}</td>
+                  <td style={{...S.td,textAlign:'right'}}>{it.qty}</td>
+                  <td style={{...S.td,textAlign:'right'}}>{numFmt(it.unit_price)}</td>
+                  <td style={{...S.td,textAlign:'right',color:C.muted}}>{numFmt(it.cost_price)}</td>
+                  <td style={{...S.td,textAlign:'right',color:'#34D399',fontWeight:600}}>{numFmt((it.unit_price-it.cost_price)*it.qty)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{display:'flex',justifyContent:'flex-end',gap:20,background:C.bg,padding:'10px 14px',borderRadius:10,fontSize:13}}>
+            <span>รายได้: <b style={{color:'#60A5FA'}}>฿{numFmt(viewOrder.total_revenue)}</b></span>
+            <span>ต้นทุน: <b style={{color:'#F87171'}}>฿{numFmt(viewOrder.total_cost)}</b></span>
+            <span>กำไร: <b style={{color:'#34D399'}}>฿{numFmt(viewOrder.gross_profit)}</b></span>
+          </div>
+          {viewOrder.note&&<div style={{marginTop:10,fontSize:12,color:C.muted}}>หมายเหตุ: {viewOrder.note}</div>}
+          <div style={{display:'flex',justifyContent:'flex-end',marginTop:16}}>
+            <button style={S.btn()} onClick={()=>setViewOrder(null)}>ปิด</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+// ===================== ADS PAGE =====================
+const emptyAd = () => ({campaign_name:'',platform:'Facebook',store_id:'',start_date:new Date().toISOString().slice(0,10),end_date:'',budget:0,actual_spend:0,impressions:0,clicks:0,orders_count:0,revenue:0,status:'active',note:''})
+
+function AdsPage() {
+  const [ads, setAds] = useState([])
+  const [stores] = useState(()=>CRUD.all('stores'))
+  const [platFilter, setPlatFilter] = useState('')
+  const [stFilter, setStFilter] = useState('')
+  const [modal, setModal] = useState(null)
+  const [form, setForm] = useState(emptyAd())
+  const [editId, setEditId] = useState(null)
+  const [importOpen, setImportOpen] = useState(false)
+
+  const load = () => setAds(CRUD.all('ads').slice().reverse())
+  useEffect(load,[])
+
+  const filtered = ads.filter(a=>(!platFilter||a.platform===platFilter)&&(!stFilter||a.status===stFilter))
+  const f = (k,v) => setForm(p=>({...p,[k]:v}))
+  const openAdd = () => { setForm(emptyAd()); setModal('add') }
+  const openEdit = a => { setForm({...a}); setEditId(a.id); setModal('edit') }
+
+  const save = () => {
+    if (!form.campaign_name) { addToast('กรุณากรอกชื่อแคมเปญ','error'); return }
+    const data = {...form, store_id:Number(form.store_id), store_name: stores.find(s=>s.id===Number(form.store_id))?.store_name||''}
+    if (modal==='add') CRUD.add('ads',data)
+    else CRUD.update('ads',editId,data)
+    addToast('บันทึกสำเร็จ'); setModal(null); load()
+  }
+  const del = id => { if(!confirm('ลบแคมเปญนี้?'))return; CRUD.remove('ads',id); addToast('ลบสำเร็จ'); load() }
+
+  const ctr = a => a.impressions>0?(a.clicks/a.impressions*100).toFixed(2):'0'
+  const cpc = a => a.clicks>0?(a.actual_spend/a.clicks).toFixed(0):'0'
+  const roas = a => a.actual_spend>0?(a.revenue/a.actual_spend).toFixed(2):'0'
+  const cpa = a => a.orders_count>0?(a.actual_spend/a.orders_count).toFixed(0):'0'
+  const roasColor = r => Number(r)>=3?'#34D399':Number(r)>=1.5?'#FCD34D':'#F87171'
+
+  const totSpend = filtered.reduce((s,a)=>s+a.actual_spend,0)
+  const totRev = filtered.reduce((s,a)=>s+a.revenue,0)
+  const totOrders = filtered.reduce((s,a)=>s+a.orders_count,0)
+  const avgRoas = totSpend>0?(totRev/totSpend).toFixed(2):'0'
+
+  const statusLabel = s => s==='active'?'กำลังยิง':s==='paused'?'หยุดชั่วคราว':'จบแล้ว'
+  const statusColor = s => s==='active'?'#34D399':s==='paused'?'#FCD34D':'#94A3B8'
+
+  const importCols = [{key:'campaign_name',label:'campaign_name',required:true},{key:'platform',label:'platform'},{key:'store_name',label:'store_name'},{key:'start_date',label:'start_date'},{key:'end_date',label:'end_date'},{key:'budget',label:'budget'},{key:'actual_spend',label:'actual_spend'},{key:'impressions',label:'impressions'},{key:'clicks',label:'clicks'},{key:'orders_count',label:'orders_count'},{key:'revenue',label:'revenue'},{key:'status',label:'status'},{key:'note',label:'note'}]
+
+  const doImport = rows => {
+    rows.forEach(r => {
+      const st = stores.find(s=>s.store_name===r.store_name||s.store_name===r['store_name'])
+      CRUD.add('ads',{campaign_name:r.campaign_name||r['campaign_name']||'',platform:r.platform||'Facebook',store_id:st?.id||null,store_name:st?.store_name||r.store_name||'',start_date:r.start_date||'',end_date:r.end_date||'',budget:Number(r.budget)||0,actual_spend:Number(r.actual_spend)||0,impressions:Number(r.impressions)||0,clicks:Number(r.clicks)||0,orders_count:Number(r.orders_count)||0,revenue:Number(r.revenue)||0,status:r.status||'active',note:r.note||''})
+    }); load()
+  }
+
+  return (
+    <div style={{padding:24,overflowY:'auto',height:'100%',display:'flex',flexDirection:'column',gap:16}}>
+      {/* Summary KPIs */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14}}>
+        {[{label:'งบประมาณรวม',val:'฿'+numFmt(totSpend),icon:'💸',color:'#F97316'},{label:'ยอดขายจาก Ads',val:'฿'+numFmt(totRev),icon:'📈',color:'#3B82F6'},{label:'ออเดอร์รวม',val:totOrders,icon:'🛒',color:'#A855F7'},{label:'ROAS เฉลี่ย',val:avgRoas+'x',icon:'🎯',color:roasColor(avgRoas)}].map(k=>(
+          <div key={k.label} style={S.card}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}><span style={{fontSize:12,color:C.muted}}>{k.label}</span><span style={{fontSize:18}}>{k.icon}</span></div>
+            <div style={{fontSize:24,fontWeight:700,color:k.color}}>{k.val}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+        <select value={platFilter} onChange={e=>setPlatFilter(e.target.value)} style={{...S.input,width:'auto'}}>
+          <option value="">ทุก Platform</option><option>Shopee</option><option>Facebook</option><option>TikTok</option>
+        </select>
+        <select value={stFilter} onChange={e=>setStFilter(e.target.value)} style={{...S.input,width:'auto'}}>
+          <option value="">ทุกสถานะ</option><option value="active">กำลังยิง</option><option value="paused">หยุดชั่วคราว</option><option value="ended">จบแล้ว</option>
+        </select>
+        <button style={S.btn(C.border,C.muted)} onClick={()=>downloadCSV('ads.csv',
+          ['ชื่อแคมเปญ','Platform','ร้าน','เริ่ม','สิ้นสุด','งบ','ใช้จริง','Impression','Click','ออเดอร์','ยอดขาย','CTR%','CPC','ROAS','CPA','สถานะ'],
+          filtered.map(a=>[a.campaign_name,a.platform,a.store_name,a.start_date,a.end_date,a.budget,a.actual_spend,a.impressions,a.clicks,a.orders_count,a.revenue,ctr(a),cpc(a),roas(a),cpa(a),statusLabel(a.status)])
+        )}>⬇ Export CSV</button>
+        <button style={S.btn(C.border,C.muted)} onClick={()=>setImportOpen(true)}>📂 Import CSV</button>
+        <button style={{...S.btn(),marginLeft:'auto'}} onClick={openAdd}>+ เพิ่มแคมเปญ</button>
+      </div>
+
+      <div style={{...S.card,padding:0,overflow:'hidden',flex:1}}>
+        <div style={{overflowX:'auto',height:'100%'}}>
+          <table style={S.table}>
+            <thead><tr>
+              {['แคมเปญ','Platform','ร้าน','ระยะเวลา','งบ','ใช้จริง','Impression','CTR%','CPC','ออเดอร์','ยอดขาย','ROAS','CPA','สถานะ',''].map(h=>(
+                <th key={h} style={{...S.th,textAlign:['งบ','ใช้จริง','Impression','CTR%','CPC','ออเดอร์','ยอดขาย','ROAS','CPA'].includes(h)?'right':'left'}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {filtered.map(a=>(
+                <tr key={a.id}>
+                  <td style={{...S.td,fontWeight:600,maxWidth:160}}>{a.campaign_name}</td>
+                  <td style={S.td}><PlatformBadge platform={a.platform}/></td>
+                  <td style={{...S.td,fontSize:12,color:C.muted,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.store_name}</td>
+                  <td style={{...S.td,fontSize:11,color:C.muted,whiteSpace:'nowrap'}}>{a.start_date}{a.end_date&&<>→{a.end_date}</>}</td>
+                  <td style={{...S.td,textAlign:'right',color:C.muted}}>{numFmt(a.budget)}</td>
+                  <td style={{...S.td,textAlign:'right'}}>{numFmt(a.actual_spend)}</td>
+                  <td style={{...S.td,textAlign:'right',color:C.muted,fontSize:12}}>{numFmt(a.impressions)}</td>
+                  <td style={{...S.td,textAlign:'right',fontSize:12}}>{ctr(a)}%</td>
+                  <td style={{...S.td,textAlign:'right',fontSize:12}}>฿{cpc(a)}</td>
+                  <td style={{...S.td,textAlign:'right',fontWeight:600}}>{a.orders_count}</td>
+                  <td style={{...S.td,textAlign:'right',fontWeight:600}}>฿{numFmt(a.revenue)}</td>
+                  <td style={{...S.td,textAlign:'right'}}><span style={{fontWeight:700,color:roasColor(roas(a))}}>{roas(a)}x</span></td>
+                  <td style={{...S.td,textAlign:'right',fontSize:12}}>฿{cpa(a)}</td>
+                  <td style={S.td}><span style={{fontSize:11,padding:'2px 8px',borderRadius:20,background:statusColor(a.status)+'22',color:statusColor(a.status),fontWeight:600}}>{statusLabel(a.status)}</span></td>
+                  <td style={S.td}>
+                    <div style={{display:'flex',gap:6}}>
+                      <button onClick={()=>openEdit(a)} style={{background:'none',border:'none',cursor:'pointer',fontSize:14}}>✏️</button>
+                      <button onClick={()=>del(a.id)} style={{background:'none',border:'none',cursor:'pointer',fontSize:14}}>🗑️</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {modal && (
+        <Modal title={modal==='add'?'เพิ่มแคมเปญ':'แก้ไขแคมเปญ'} onClose={()=>setModal(null)} width={680}>
+          <FormGrid>
+            <Field label="ชื่อแคมเปญ *" span={2}><Inp value={form.campaign_name} onChange={v=>f('campaign_name',v)}/></Field>
+            <Field label="Platform *"><Sel value={form.platform} onChange={v=>f('platform',v)}><option>Facebook</option><option>Shopee</option><option>TikTok</option></Sel></Field>
+            <Field label="ร้าน"><Sel value={form.store_id} onChange={v=>f('store_id',v)}><option value="">-</option>{stores.map(s=><option key={s.id} value={s.id}>{s.store_name}</option>)}</Sel></Field>
+            <Field label="วันเริ่ม"><Inp type="date" value={form.start_date} onChange={v=>f('start_date',v)}/></Field>
+            <Field label="วันสิ้นสุด"><Inp type="date" value={form.end_date} onChange={v=>f('end_date',v)}/></Field>
+            <Field label="งบประมาณ (฿)"><Inp type="number" value={form.budget} onChange={v=>f('budget',Number(v))}/></Field>
+            <Field label="ใช้จริง (฿)"><Inp type="number" value={form.actual_spend} onChange={v=>f('actual_spend',Number(v))}/></Field>
+            <Field label="Impressions"><Inp type="number" value={form.impressions} onChange={v=>f('impressions',Number(v))}/></Field>
+            <Field label="Clicks"><Inp type="number" value={form.clicks} onChange={v=>f('clicks',Number(v))}/></Field>
+            <Field label="ออเดอร์"><Inp type="number" value={form.orders_count} onChange={v=>f('orders_count',Number(v))}/></Field>
+            <Field label="ยอดขาย (฿)"><Inp type="number" value={form.revenue} onChange={v=>f('revenue',Number(v))}/></Field>
+            <Field label="สถานะ"><Sel value={form.status} onChange={v=>f('status',v)}><option value="active">กำลังยิง</option><option value="paused">หยุดชั่วคราว</option><option value="ended">จบแล้ว</option></Sel></Field>
+            {form.actual_spend>0&&(
+              <div style={{gridColumn:'1/-1',background:C.bg,borderRadius:10,padding:'10px 14px',display:'flex',gap:24,fontSize:13}}>
+                <span>CTR: <b>{form.impressions>0?(form.clicks/form.impressions*100).toFixed(2):0}%</b></span>
+                <span>CPC: <b>฿{form.clicks>0?(form.actual_spend/form.clicks).toFixed(0):0}</b></span>
+                <span>ROAS: <b style={{color:roasColor(form.actual_spend>0?(form.revenue/form.actual_spend).toFixed(2):0)}}>{form.actual_spend>0?(form.revenue/form.actual_spend).toFixed(2):0}x</b></span>
+                <span>CPA: <b>฿{form.orders_count>0?(form.actual_spend/form.orders_count).toFixed(0):0}</b></span>
+              </div>
+            )}
+            <Field label="หมายเหตุ" span={2}><Textarea value={form.note} onChange={v=>f('note',v)}/></Field>
+          </FormGrid>
+          <ModalBtns onCancel={()=>setModal(null)} onSave={save}/>
+        </Modal>
+      )}
+      {importOpen && <ImportModal title="แคมเปญ Ads" columns={importCols} onImport={doImport} onClose={()=>setImportOpen(false)}/>}
+    </div>
+  )
+}
+
+// ===================== SALE MODAL (ตัดสต็อก) =====================
+function SaleModal({ onClose }) {
+  const [allProducts, setAllProducts] = useState([])
+  const [lines, setLines] = useState([{ product_id:'', qty:1 }])
+  const [search, setSearch] = useState('')
+  const [done, setDone] = useState(false)
+
+  useEffect(() => setAllProducts(CRUD.all('products').filter(p=>p.status==='active')), [])
+
+  const visibleProducts = search
+    ? allProducts.filter(p=>p.name.toLowerCase().includes(search.toLowerCase())||p.sku.toLowerCase().includes(search.toLowerCase()))
+    : allProducts
+
+  const addLine = () => setLines(p=>[...p,{product_id:'',qty:1}])
+  const removeLine = i => setLines(p=>p.filter((_,j)=>j!==i))
+  const updateLine = (i,k,v) => setLines(p=>p.map((l,j)=>j===i?{...l,[k]:v}:l))
+
+  const getProduct = id => allProducts.find(p=>p.id===Number(id))
+
+  const confirm = () => {
+    const valid = lines.filter(l=>l.product_id&&Number(l.qty)>0)
+    if (!valid.length) { addToast('กรุณาเลือกสินค้าและจำนวนที่ขาย','error'); return }
+    valid.forEach(l => {
+      const p = getProduct(l.product_id)
+      if (p) {
+        const newStock = Math.max(0, p.stock - Number(l.qty))
+        CRUD.update('products', p.id, { stock: newStock })
+        logStock({ type:'sale', product_id:p.id, product_name:p.name, product_sku:p.sku, qty_change:-Number(l.qty), stock_before:p.stock, stock_after:newStock, note:'บันทึกการขาย' })
+      }
+    })
+    addToast(`✓ ตัดสต็อกสำเร็จ ${valid.length} รายการ`)
+    onClose()
+  }
+
+  return (
+    <Modal title="🛒 บันทึกการขาย / ตัดสต็อก" onClose={onClose} width={660}>
+      {/* Search helper */}
+      <div style={{ marginBottom:14 }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 พิมพ์กรองสินค้าในตัวเลือก (SKU / ชื่อ)..."
+          style={{ ...S.input, fontSize:12 }} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border} />
+      </div>
+
+      {/* Lines */}
+      <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:14 }}>
+        {lines.map((line,i) => {
+          const p = getProduct(line.product_id)
+          const newStock = p ? Math.max(0, p.stock - Number(line.qty)) : null
+          const isOver = p && Number(line.qty) > p.stock
+          return (
+            <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 80px auto auto', gap:8, alignItems:'center', background:C.bg, padding:'10px 12px', borderRadius:12, border:`1px solid ${C.border}` }}>
+              <select value={line.product_id} onChange={e=>updateLine(i,'product_id',e.target.value)} style={{ ...S.input, fontSize:12 }}>
+                <option value="">-- เลือกสินค้าที่ขาย --</option>
+                {visibleProducts.map(pr=>(
+                  <option key={pr.id} value={pr.id}>{pr.sku} — {pr.name} (คงเหลือ: {pr.stock})</option>
+                ))}
+              </select>
+              <input type="number" min="1" value={line.qty} onChange={e=>updateLine(i,'qty',e.target.value)}
+                placeholder="จำนวน" style={{ ...S.input, textAlign:'center', fontSize:13 }}
+                onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border} />
+              <div style={{ fontSize:12, whiteSpace:'nowrap', minWidth:120 }}>
+                {p ? (
+                  <span>
+                    <span style={{ color:C.muted }}>{p.stock}</span>
+                    <span style={{ color:C.muted }}> → </span>
+                    <span style={{ fontWeight:700, color: isOver?'#F87171': newStock<=p.min_stock?'#FCD34D':'#34D399' }}>{newStock}</span>
+                    {isOver && <span style={{ color:'#F87171', fontSize:10, display:'block' }}>⚠ เกินสต็อก</span>}
+                  </span>
+                ) : <span style={{ color:C.border }}>—</span>}
+              </div>
+              <button onClick={()=>removeLine(i)} style={{ background:'none', border:'none', cursor:'pointer', color:'#F87171', fontSize:18, lineHeight:1, padding:'0 4px' }}>×</button>
+            </div>
+          )
+        })}
+      </div>
+
+      <button onClick={addLine} style={{ ...S.btn(C.border, C.muted), marginBottom:20 }}>+ เพิ่มสินค้า</button>
+
+      {/* Summary */}
+      {lines.filter(l=>l.product_id&&Number(l.qty)>0).length > 0 && (
+        <div style={{ background:'rgba(16,185,129,0.08)', border:'1px solid rgba(16,185,129,0.25)', borderRadius:12, padding:'10px 14px', marginBottom:16, fontSize:12 }}>
+          <div style={{ fontWeight:600, color:'#34D399', marginBottom:6 }}>สรุปรายการที่จะตัดสต็อก</div>
+          {lines.filter(l=>l.product_id&&Number(l.qty)>0).map((l,i)=>{
+            const p = getProduct(l.product_id)
+            return p ? <div key={i} style={{ color:C.muted, padding:'2px 0' }}>• {p.name} ลดลง <span style={{ color:C.text, fontWeight:600 }}>{l.qty} ชิ้น</span></div> : null
+          })}
+        </div>
+      )}
+
+      <div style={{ display:'flex', justifyContent:'flex-end', gap:10 }}>
+        <button style={S.btn(C.border, C.muted)} onClick={onClose}>ยกเลิก</button>
+        <button style={S.btn('#10B981')} onClick={confirm}>✓ ยืนยันตัดสต็อก</button>
+      </div>
+    </Modal>
+  )
+}
+
+// ===================== STOCK LOG PAGE =====================
+function StockLogPage() {
+  const [logs, setLogs] = useState([])
+  const [typeFilter, setTypeFilter] = useState('')
+  const [search, setSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+
+  const load = () => setLogs((DB.get('stock_logs') || []).slice().reverse())
+  useEffect(load, [])
+
+  const filtered = logs.filter(l => {
+    if (typeFilter && l.type !== typeFilter) return false
+    if (search) { const q = search.toLowerCase(); if (!l.product_name.toLowerCase().includes(q) && !l.product_sku.toLowerCase().includes(q)) return false }
+    if (dateFrom && l.created_at < dateFrom) return false
+    if (dateTo && l.created_at > dateTo + 'T23:59:59') return false
+    return true
+  })
+
+  const today = new Date().toISOString().slice(0,10)
+  const todayLogs = logs.filter(l => l.created_at.startsWith(today))
+  const todaySales = todayLogs.filter(l => l.type==='sale')
+  const todayRestock = todayLogs.filter(l => l.type==='restock')
+  const totalSoldToday = todaySales.reduce((s,l) => s + Math.abs(l.qty_change), 0)
+  const totalRestockToday = todayRestock.reduce((s,l) => s + l.qty_change, 0)
+
+  // bar chart: last 7 days sale qty
+  const last7 = Array.from({length:7}, (_,i) => {
+    const d = new Date(); d.setDate(d.getDate()-i)
+    const key = d.toISOString().slice(0,10)
+    const sold = logs.filter(l => l.type==='sale' && l.created_at.startsWith(key)).reduce((s,l)=>s+Math.abs(l.qty_change),0)
+    const restocked = logs.filter(l => l.type==='restock' && l.created_at.startsWith(key)).reduce((s,l)=>s+l.qty_change,0)
+    return { key, label: d.toLocaleDateString('th-TH',{day:'numeric',month:'short'}), sold, restocked }
+  }).reverse()
+
+  const maxBar = Math.max(...last7.flatMap(d=>[d.sold, d.restocked]), 1)
+
+  const typeLabel = t => t==='sale'?'ตัดสต็อก':t==='restock'?'เติมสต็อก':'ปรับสต็อก'
+  const typeColor = t => t==='sale'?'#F87171':t==='restock'?'#34D399':'#FCD34D'
+  const typeBg    = t => t==='sale'?'rgba(239,68,68,0.15)':t==='restock'?'rgba(16,185,129,0.15)':'rgba(234,179,8,0.15)'
+
+  const exportLog = () => downloadCSV('stock_log.csv',
+    ['วันที่เวลา','ประเภท','SKU','สินค้า','จำนวนเปลี่ยนแปลง','สต็อกก่อน','สต็อกหลัง','หมายเหตุ'],
+    filtered.map(l => [new Date(l.created_at).toLocaleString('th-TH'), typeLabel(l.type), l.product_sku, l.product_name, (l.qty_change>0?'+':'')+l.qty_change, l.stock_before, l.stock_after, l.note])
+  )
+
+  return (
+    <div style={{ padding:24, overflowY:'auto', height:'100%', display:'flex', flexDirection:'column', gap:20 }}>
+
+      {/* KPI cards */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14 }}>
+        {[
+          { label:'รายการทั้งหมด', val:logs.length, icon:'📋', color:'#3B82F6' },
+          { label:'รายการวันนี้', val:todayLogs.length, icon:'📅', color:'#A855F7' },
+          { label:'หน่วยขายวันนี้', val:totalSoldToday, icon:'📤', color:'#F87171' },
+          { label:'หน่วยเติมวันนี้', val:totalRestockToday, icon:'📥', color:'#34D399' },
+        ].map(k => (
+          <div key={k.label} style={S.card}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+              <span style={{ fontSize:12, color:C.muted }}>{k.label}</span>
+              <div style={{ width:34, height:34, borderRadius:10, background:k.color+'22', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16 }}>{k.icon}</div>
+            </div>
+            <div style={{ fontSize:32, fontWeight:700, color:C.text }}>{k.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 7-day bar chart */}
+      <div style={S.card}>
+        <div style={{ fontWeight:600, marginBottom:4 }}>กิจกรรมสต็อก 7 วันล่าสุด</div>
+        <div style={{ display:'flex', gap:16, marginBottom:10 }}>
+          <span style={{ fontSize:11, color:'#F87171' }}>■ ตัดสต็อก</span>
+          <span style={{ fontSize:11, color:'#34D399' }}>■ เติมสต็อก</span>
+        </div>
+        <div style={{ display:'flex', gap:10, height:140, alignItems:'flex-end' }}>
+          {last7.map(d => (
+            <div key={d.key} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
+              <div style={{ width:'100%', display:'flex', gap:2, height:120, alignItems:'flex-end' }}>
+                <div title={`ขาย: ${d.sold}`} style={{ flex:1, background:'#F87171', borderRadius:'3px 3px 0 0', height:`${(d.sold/maxBar)*100}%`, minHeight: d.sold?2:0, transition:'height .3s' }} />
+                <div title={`เติม: ${d.restocked}`} style={{ flex:1, background:'#34D399', borderRadius:'3px 3px 0 0', height:`${(d.restocked/maxBar)*100}%`, minHeight: d.restocked?2:0, transition:'height .3s' }} />
+              </div>
+              <span style={{ fontSize:10, color:C.muted, textAlign:'center', whiteSpace:'nowrap' }}>{d.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Filters + table */}
+      <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 ค้นหา SKU / ชื่อสินค้า..."
+          style={{ ...S.input, width:220 }} onFocus={e=>e.target.style.borderColor='#3B82F6'} onBlur={e=>e.target.style.borderColor=C.border} />
+        <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} style={{ ...S.input, width:'auto' }}>
+          <option value="">ทุกประเภท</option>
+          <option value="sale">ตัดสต็อก</option>
+          <option value="restock">เติมสต็อก</option>
+          <option value="adjust">ปรับสต็อก</option>
+        </select>
+        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:C.muted }}>
+          <span>จาก</span>
+          <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={{ ...S.input, width:140, fontSize:12 }} />
+          <span>ถึง</span>
+          <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={{ ...S.input, width:140, fontSize:12 }} />
+        </div>
+        <button style={S.btn(C.border, C.muted)} onClick={exportLog}>⬇ Export CSV</button>
+        {(typeFilter||search||dateFrom||dateTo) && (
+          <button style={{ ...S.btn(C.border,'#F87171'), fontSize:11 }} onClick={()=>{setTypeFilter('');setSearch('');setDateFrom('');setDateTo('')}}>× ล้างตัวกรอง</button>
+        )}
+        <span style={{ marginLeft:'auto', fontSize:12, color:C.muted }}>{filtered.length} รายการ</span>
+      </div>
+
+      <div style={{ ...S.card, padding:0, overflow:'hidden', flex:1 }}>
+        <div style={{ overflowX:'auto', height:'100%' }}>
+          <table style={S.table}>
+            <thead>
+              <tr>
+                {['วันที่เวลา','ประเภท','SKU','สินค้า','จำนวน','สต็อกก่อน','สต็อกหลัง','หมายเหตุ'].map(h => (
+                  <th key={h} style={{ ...S.th, textAlign:['จำนวน','สต็อกก่อน','สต็อกหลัง'].includes(h)?'center':'left' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr><td colSpan={8} style={{ ...S.td, textAlign:'center', color:C.muted, padding:40 }}>ยังไม่มีประวัติสต็อก</td></tr>
+              )}
+              {filtered.map(l => (
+                <tr key={l.id}>
+                  <td style={{ ...S.td, fontSize:12, color:C.muted, whiteSpace:'nowrap' }}>
+                    {new Date(l.created_at).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}
+                  </td>
+                  <td style={S.td}>
+                    <span style={{ background:typeBg(l.type), color:typeColor(l.type), padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600 }}>
+                      {typeLabel(l.type)}
+                    </span>
+                  </td>
+                  <td style={{ ...S.td, fontFamily:'monospace', fontSize:12, color:C.muted }}>{l.product_sku}</td>
+                  <td style={{ ...S.td, fontWeight:500 }}>{l.product_name}</td>
+                  <td style={{ ...S.td, textAlign:'center', fontWeight:700, color: l.qty_change < 0 ? '#F87171' : '#34D399' }}>
+                    {l.qty_change > 0 ? '+' : ''}{l.qty_change}
+                  </td>
+                  <td style={{ ...S.td, textAlign:'center', color:C.muted }}>{l.stock_before}</td>
+                  <td style={{ ...S.td, textAlign:'center', fontWeight:600 }}>{l.stock_after}</td>
+                  <td style={{ ...S.td, fontSize:12, color:C.muted }}>{l.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ===================== TOPBAR =====================
+const PAGE_TITLES = { dashboard:'Dashboard', stores:'Store Hub', products:'รายการสินค้า', team:'ทีมงาน', suppliers:'ซัพพลายเออร์', ads:'Ads Tracking', orders:'บันทึกการขาย', stocklog:'ประวัติสต็อก' }
+
+function TopBar({ page }) {
+  const now = new Date().toLocaleDateString('th-TH',{dateStyle:'long'})
+  return (
+    <div style={{ height:52, background:C.surface, borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 24px', flexShrink:0 }}>
+      <span style={{ fontWeight:600, fontSize:16 }}>{PAGE_TITLES[page]}</span>
+      <span style={{ fontSize:13, color:C.muted }}>{now}</span>
+    </div>
+  )
+}
+
+// ===================== APP ROOT =====================
+function App() {
+  const [page, setPage] = useState('dashboard')
+  const [saleOpen, setSaleOpen] = useState(false)
+  const [addStockOpen, setAddStockOpen] = useState(false)
+  const [orderOpen, setOrderOpen] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const reload = () => setRefreshKey(k => k+1)
+  const pages = {
+    dashboard:<Dashboard key={refreshKey}/>,
+    stores:<StoreHub/>, products:<ProductList/>, team:<TeamPage/>,
+    suppliers:<SupplierList/>, ads:<AdsPage/>,
+    orders:<OrdersPage key={refreshKey}/>, stocklog:<StockLogPage key={refreshKey}/>
+  }
+  return (
+    <div style={{ display:'flex', height:'100vh', overflow:'hidden' }}>
+      <Sidebar page={page} setPage={setPage}
+        onSaleOpen={()=>setSaleOpen(true)}
+        onAddStockOpen={()=>setAddStockOpen(true)}
+        onOrderOpen={()=>setOrderOpen(true)}
+      />
+      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+        <TopBar page={page} />
+        <div style={{ flex:1, overflow:'hidden' }}>{pages[page]}</div>
+      </div>
+      <ToastContainer />
+      {saleOpen    && <SaleModal     onClose={()=>{setSaleOpen(false);reload()}} />}
+      {addStockOpen && <AddStockModal onClose={()=>{setAddStockOpen(false);reload()}} />}
+      {orderOpen   && <OrderModal    onClose={()=>{setOrderOpen(false);reload()}} onSaved={reload} />}
+    </div>
+  )
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />)
+</script>
+</body>
+</html>
