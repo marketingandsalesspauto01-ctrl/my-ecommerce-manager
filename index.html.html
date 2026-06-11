@@ -27,30 +27,32 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1)}
 
 // ===================== DATA LAYER (SUPABASE) =====================
 const supabaseUrl = 'https://dckytdkbmipihtpzjibc.supabase.co'
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRja3l0ZGtibWlwaWh0cHpqaWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNjQ0MzksImV4cCI6MjA5NjY0MDQzOX0.JshpA_kEAYB8NFAbt_jdI0nd1L8GyhwzshRXaBq6BfI'
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+
+// เอาข้อความ eyJ... ของคุณมาใส่ตรงนี้ (อย่าลืมขีดคร่อม ' ' นะครับ)
+const supabaseKey = 'ใส่กุญแจ_eyJ_ของคุณที่นี่' 
+
+const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey)
 
 const CRUD = {
   all: async (key) => {
-    const { data, error } = await supabase.from(key).select('*').order('id', { ascending: true })
+    const { data, error } = await supabaseClient.from(key).select('*').order('id', { ascending: true })
     if (error) { console.error('Supabase Error:', error); return [] }
     return data || []
   },
   add: async (key, data) => {
-    const { data: ret, error } = await supabase.from(key).insert([data]).select()
+    const { data: ret, error } = await supabaseClient.from(key).insert([data]).select()
     if (error) console.error('Supabase Error:', error)
     return ret ? ret[0] : null
   },
   update: async (key, id, data) => {
-    const { error } = await supabase.from(key).update(data).eq('id', id)
+    const { error } = await supabaseClient.from(key).update(data).eq('id', id)
     if (error) console.error('Supabase Error:', error)
   },
   remove: async (key, id) => {
-    const { error } = await supabase.from(key).delete().eq('id', id)
+    const { error } = await supabaseClient.from(key).delete().eq('id', id)
     if (error) console.error('Supabase Error:', error)
   },
 }
-
 // ===================== HELPERS =====================
 const { useState, useEffect, useCallback, useRef } = React
 
