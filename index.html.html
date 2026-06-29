@@ -636,7 +636,7 @@ function StoreHub() {
 }
 
 // ===================== PRODUCT LIST =====================
-const emptyProduct = () => ({ sku:'', name:'', category:'auto_parts', brand:'', store_ids:'', cost_price:0, selling_price:0, stock:0, min_stock:5, lead_time_days:7, supplier_id:'', status:'active', note:'' })
+const emptyProduct = () => ({ sku:'', name:'', category:'auto_parts', brand:'', store_ids:'', cost_price:0, selling_price:0, stock:0, min_stock:5, lead_time_days:7, supplier_id:'', status:'active', note:'', image_url:'', description:'' })
 
 function ProductList() {
   const [items, setItems] = useState([])
@@ -709,8 +709,8 @@ function ProductList() {
         </select>
         <button style={S.btn(C.border,C.muted)} onClick={()=>setImportOpen(true)}>📂 Import CSV</button>
         <button style={S.btn(C.border, C.muted)} onClick={()=>downloadCSV('products.csv',
-          ['SKU','ชื่อ','หมวด','แบรนด์','ราคาทุน','ราคาขาย','กำไร%','สต็อก','สต็อกขั้นต่ำ','Lead Time','ซัพพลายเออร์','สถานะ'],
-          filtered.map(p=>[p.sku,p.name,catLabel(p.category),p.brand,p.cost_price,p.selling_price,profit(p),p.stock,p.min_stock,p.lead_time_days,p.supplier_name||'',p.status])
+          ['SKU','ชื่อ','หมวด','แบรนด์','ราคาทุน','ราคาขาย','กำไร%','สต็อก','สต็อกขั้นต่ำ','Lead Time','ซัพพลายเออร์','สถานะ','URL รูปภาพ','รายละเอียด'],
+          filtered.map(p=>[p.sku,p.name,catLabel(p.category),p.brand,p.cost_price,p.selling_price,profit(p),p.stock,p.min_stock,p.lead_time_days,p.supplier_name||'',p.status,p.image_url||'',p.description||''])
         )}>⬇ Export CSV</button>
         <button style={{ ...S.btn(), marginLeft:'auto' }} onClick={openAdd}>+ เพิ่มสินค้า</button>
       </div>
@@ -719,17 +719,23 @@ function ProductList() {
         <div style={{ overflowX:'auto', height:'100%' }}>
           <table style={S.table}>
             <thead>
-              <tr>{['SKU','ชื่อสินค้า','หมวด','ราคาทุน','ราคาขาย','กำไร%','สต็อก','Lead Time','สถานะ',''].map((h,i)=><th key={i} style={{...S.th,textAlign:['ราคาทุน','ราคาขาย','กำไร%','สต็อก'].includes(h)?'right':h===''?'right':'left'}}>{h}</th>)}</tr>
+              <tr>{['รูปภาพ','SKU','ชื่อสินค้า','หมวด','ราคาทุน','ราคาขาย','กำไร%','สต็อก','Lead Time','สถานะ',''].map((h,i)=><th key={i} style={{...S.th,textAlign:['ราคาทุน','ราคาขาย','กำไร%','สต็อก'].includes(h)?'right':h===''?'right':'left'}}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {filtered.map(p => {
                 const pct = profit(p)
                 return (
                   <tr key={p.id}>
+                    <td style={S.td}>
+                      {p.image_url
+                        ? <img src={p.image_url} alt={p.name} style={{ width:40, height:40, borderRadius:8, objectFit:'cover', background:C.bg }} onError={e=>{e.target.style.display='none'}} />
+                        : <div style={{ width:40, height:40, borderRadius:8, background:C.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, color:C.muted }}>📦</div>}
+                    </td>
                     <td style={{ ...S.td, fontFamily:'monospace', fontSize:12, color:C.muted }}>{p.sku}</td>
                     <td style={S.td}>
                       <div style={{ fontWeight:600 }}>{p.name}</div>
                       {p.brand && <div style={{ fontSize:11, color:C.muted }}>{p.brand}</div>}
+                      {p.description && <div style={{ fontSize:11, color:C.muted, maxWidth:220, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={p.description}>{p.description}</div>}
                     </td>
                     <td style={{ ...S.td, color:C.muted }}>{catLabel(p.category)}</td>
                     <td style={{ ...S.td, textAlign:'right', color:C.muted }}>{numFmt(p.cost_price)}</td>
@@ -775,6 +781,11 @@ function ProductList() {
             <Field label="Lead Time (วัน)"><Inp type="number" value={form.lead_time_days} onChange={v=>f('lead_time_days',Number(v))} /></Field>
             <Field label="สถานะ"><Sel value={form.status} onChange={v=>f('status',v)}><option value="active">ใช้งาน</option><option value="inactive">ไม่ใช้</option></Sel></Field>
             <Field label="ร้านที่ขาย (ID คั่นด้วย ,)" span={2}><Inp value={form.store_ids} onChange={v=>f('store_ids',v)} /></Field>
+            <Field label="URL รูปภาพสินค้า" span={2}>
+              <Inp value={form.image_url} onChange={v=>f('image_url',v)} placeholder="https://..." />
+              {form.image_url && <img src={form.image_url} alt="preview" style={{ marginTop:8, width:80, height:80, borderRadius:10, objectFit:'cover', border:`1px solid ${C.border}` }} onError={e=>{e.target.style.display='none'}} />}
+            </Field>
+            <Field label="รายละเอียดสินค้า" span={2}><Textarea value={form.description} onChange={v=>f('description',v)} rows={3} /></Field>
             <Field label="หมายเหตุ" span={2}><Textarea value={form.note} onChange={v=>f('note',v)} /></Field>
           </FormGrid>
           <ModalBtns onCancel={()=>setModal(null)} onSave={save} />
@@ -792,11 +803,11 @@ function ProductList() {
           {key:'sku',label:'sku',required:true},{key:'name',label:'name',required:true},{key:'category',label:'category'},
           {key:'brand',label:'brand'},{key:'cost_price',label:'cost_price'},{key:'selling_price',label:'selling_price'},
           {key:'stock',label:'stock'},{key:'min_stock',label:'min_stock'},{key:'lead_time_days',label:'lead_time_days'},
-          {key:'status',label:'status'},{key:'note',label:'note'}
+          {key:'status',label:'status'},{key:'note',label:'note'},{key:'image_url',label:'image_url'},{key:'description',label:'description'}
         ]} onImport={async rows=>{
           for (const r of rows) {
             if(items.find(p=>p.sku===r.sku)) continue;
-            await CRUD.add('products',{sku:r.sku||'',name:r.name||'',category:r.category||'auto_parts',brand:r.brand||'',store_ids:'',cost_price:Number(r.cost_price)||0,selling_price:Number(r.selling_price)||0,stock:Number(r.stock)||0,min_stock:Number(r.min_stock)||5,lead_time_days:Number(r.lead_time_days)||7,supplier_id:null,status:r.status||'active',note:r.note||''})
+            await CRUD.add('products',{sku:r.sku||'',name:r.name||'',category:r.category||'auto_parts',brand:r.brand||'',store_ids:'',cost_price:Number(r.cost_price)||0,selling_price:Number(r.selling_price)||0,stock:Number(r.stock)||0,min_stock:Number(r.min_stock)||5,lead_time_days:Number(r.lead_time_days)||7,supplier_id:null,status:r.status||'active',note:r.note||'',image_url:r.image_url||'',description:r.description||''})
           }
           await load()
         }} onClose={()=>setImportOpen(false)}/>
