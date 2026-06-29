@@ -1221,6 +1221,210 @@ function ImportModal({ title, columns, onImport, onClose }) {
   )
 }
 
+// ===================== SHOPEE CSV IMPORT MODAL =====================
+const SHOPEE_ALIASES = {
+  orderId: ['หมายเลขคำสั่งซื้อ','order id','order number','รหัสคำสั่งซื้อ'],
+  date: ['วันที่ทำการสั่งซื้อ','order creation date','วันที่สั่งซื้อ','created time','create time'],
+  sku: ['เลขอ้างอิง sku','sku reference no.','seller sku','รหัส sku ผู้ขาย','sku'],
+  name: ['ชื่อสินค้า','product name'],
+  qty: ['จำนวน','quantity'],
+  total: ['ยอดขายสินค้าโดยรวม','total','deal price','ราคาขายสุดท้าย','sub total'],
+  status: ['สถานะคำสั่งซื้อ','order status'],
+}
+
+function ShopeeImportModal({ onClose, onImported }) {
+  const [stores, setStores] = useState([])
+  const [products, setProducts] = useState([])
+  const [storeId, setStoreId] = useState('')
+  const [text, setText] = useState('')
+  const [file, setFile] = useState(null)
+  const [parsedOrders, setParsedOrders] = useState([])
+  const [unmatchedSkus, setUnmatchedSkus] = useState([])
+  const [parseError, setParseError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    CRUD.all('stores').then(s => setStores(s.filter(x => x.platform === 'Shopee')))
+    CRUD.all('products').then(setProducts)
+  }, [])
+
+  const parseCSV = raw => {
+    const lines = raw.trim().split('\n').map(l => l.trim()).filter(Boolean)
+    if (lines.length < 2) return []
+    const headers = lines[0].replace(/^﻿/, '').split(',').map(h => h.replace(/^"|"$/g, '').trim())
+    return lines.slice(1).map(line => {
+      const vals = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,)|(?<=,)$)/g) || []
+      const row = {}
+      headers.forEach((h, i) => { row[h] = (vals[i] || '').replace(/^"|"$/g, '').trim() })
+      return row
+    })
+  }
+
+  const findHeader = (headers, aliases) =>
+    headers.find(h => aliases.some(a => h.toLowerCase().trim() === a.toLowerCase().trim())) ||
+    headers.find(h => aliases.some(a => h.toLowerCase().includes(a.toLowerCase())))
+
+  const handleText = raw => {
+    setText(raw)
+    setParseError('')
+    const rows = parseCSV(raw)
+    if (!rows.length) { setParsedOrders([]); setUnmatchedSkus([]); return }
+    const headers = Object.keys(rows[0])
+    const col = {}
+    Object.entries(SHOPEE_ALIASES).forEach(([k, aliases]) => { col[k] = findHeader(headers, aliases) })
+
+    if (!col.orderId || !col.sku || !col.qty) {
+      setParsedOrders([]); setUnmatchedSkus([])
+      setParseError('ไม่พบคอลัมน์ที่จำเป็น (เลขคำสั่งซื้อ / SKU / จำนวน) ในไฟล์นี้ — ตรวจสอบว่าเป็นไฟล์ Export ออเดอร์จาก Shopee Seller Centre จริงหรือไม่')
+      return
+    }
+
+    const grouped = {}
+    const unmatched = new Set()
+    rows.forEach(r => {
+      const oid = r[col.orderId]
+      if (!oid) return
+      if (col.status) {
+        const st = (r[col.status] || '').toLowerCase()
+        if (st.includes('ยกเลิก') || st.includes('cancel')) return
+      }
+      if (!grouped[oid]) grouped[oid] = { order_id: oid, date: col.date ? r[col.date] : '', items: [] }
+      const sku = (r[col.sku] || '').trim()
+      const qty = Number(r[col.qty]) || 0
+      const total = col.total ? (Number(String(r[col.total]).replace(/[^0-9.-]/g, '')) || 0) : 0
+      const product = products.find(p => p.sku.toLowerCase() === sku.toLowerCase())
+      if (!product) unmatched.add(sku)
+      grouped[oid].items.push({
+        sku, qty, total,
+        product_id: product ? product.id : null,
+        product_name: product ? product.name : (col.name ? r[col.name] : sku),
+        cost_price: product ? product.cost_price : 0,
+      })
+    })
+
+    const ordersArr = Object.values(grouped).map(o => {
+      const total_revenue = o.items.reduce((s, it) => s + it.total, 0)
+      const total_cost = o.items.reduce((s, it) => s + it.cost_price * it.qty, 0)
+      return { ...o, total_revenue, total_cost, gross_profit: total_revenue - total_cost }
+    })
+    setParsedOrders(ordersArr)
+    setUnmatchedSkus([...unmatched])
+  }
+
+  const handleFile = e => {
+    const f = e.target.files[0]
+    if (!f) return
+    setFile(f.name)
+    const reader = new FileReader()
+    reader.onload = ev => handleText(ev.target.result)
+    reader.readAsText(f, 'UTF-8')
+  }
+
+  const doImport = async () => {
+    if (!storeId) { addToast('กรุณาเลือกร้าน Shopee ที่จะนำเข้า', 'error'); return }
+    if (!parsedOrders.length) { addToast('ไม่พบออเดอร์ที่นำเข้าได้', 'error'); return }
+    setBusy(true)
+    const store = stores.find(s => s.id === Number(storeId))
+    let okCount = 0
+    for (const o of parsedOrders) {
+      const itemDetails = o.items.map(it => ({
+        product_id: it.product_id, product_name: it.product_name, sku: it.sku,
+        qty: it.qty, unit_price: it.qty > 0 ? Math.round(it.total / it.qty) : 0, cost_price: it.cost_price,
+      }))
+      const d = new Date(o.date)
+      const orderDate = !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
+
+      await CRUD.add('orders', {
+        order_date: orderDate, store_id: store.id, store_name: store.store_name, platform: 'Shopee',
+        items: itemDetails, total_revenue: o.total_revenue, total_cost: o.total_cost, gross_profit: o.gross_profit,
+        note: `นำเข้าจาก Shopee CSV (Order ID: ${o.order_id})`,
+      })
+      for (const it of o.items) {
+        if (!it.product_id) continue
+        const p = products.find(x => x.id === it.product_id)
+        if (!p) continue
+        const ns = Math.max(0, p.stock - it.qty)
+        await CRUD.update('products', p.id, { stock: ns })
+        await logStock({ type: 'sale', product_id: p.id, product_name: p.name, product_sku: p.sku, qty_change: -it.qty, stock_before: p.stock, stock_after: ns, note: `Shopee Order ${o.order_id}` })
+        p.stock = ns
+      }
+      okCount++
+    }
+    setBusy(false)
+    addToast(`✓ นำเข้าออเดอร์จาก Shopee สำเร็จ ${okCount} ออเดอร์`)
+    onImported?.(); onClose()
+  }
+
+  return (
+    <Modal title="🛍️ นำเข้าออเดอร์จาก Shopee (CSV)" onClose={onClose} width={760}>
+      <div style={{ background: C.bg, borderRadius: 12, padding: '10px 14px', border: `1px solid ${C.border}`, marginBottom: 14, fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
+        วิธีหาไฟล์: เข้า <b style={{ color: C.text }}>Shopee Seller Centre → จัดการคำสั่งซื้อ → เลือกช่วงวันที่ → กด "Export"</b> แล้วนำไฟล์ CSV ที่ได้มาวาง/อัปโหลดด้านล่างนี้ (ระบบจะรวมรายการสินค้าที่อยู่ในออเดอร์เดียวกันให้อัตโนมัติ และจับคู่สินค้าด้วย SKU)
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={S.label}>ร้าน Shopee ที่จะนำเข้า *</label>
+        <Sel value={storeId} onChange={setStoreId}>
+          <option value="">-- เลือกร้าน Shopee --</option>
+          {stores.map(s => <option key={s.id} value={s.id}>{s.store_name}</option>)}
+        </Sel>
+        {stores.length === 0 && <div style={{ fontSize: 12, color: '#FCD34D', marginTop: 6 }}>⚠ ยังไม่มีร้านที่ platform เป็น Shopee ในระบบ — ไปเพิ่มที่หน้า Store Hub ก่อน</div>}
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12, alignItems: 'center' }}>
+        <label style={{ ...S.btn('#334155', '#94A3B8'), cursor: 'pointer', fontSize: 12 }}>
+          📎 เลือกไฟล์ .csv จาก Shopee
+          <input type="file" accept=".csv,.txt" onChange={handleFile} style={{ display: 'none' }} />
+        </label>
+        {file && <span style={{ fontSize: 12, color: '#34D399' }}>✓ {file}</span>}
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <label style={S.label}>หรือวาง CSV text ที่นี่:</label>
+        <textarea value={text} onChange={e => handleText(e.target.value)} rows={4}
+          style={{ ...S.input, resize: 'vertical', fontFamily: 'monospace', fontSize: 12 }}
+          onFocus={e => e.target.style.borderColor = '#3B82F6'} onBlur={e => e.target.style.borderColor = C.border} />
+      </div>
+
+      {parseError && (
+        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#F87171' }}>⚠ {parseError}</div>
+      )}
+
+      {unmatchedSkus.length > 0 && (
+        <div style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: 10, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#FCD34D' }}>
+          ⚠ พบ {unmatchedSkus.length} SKU ที่ไม่มีในระบบสินค้า (ต้นทุน/สต็อกจะไม่ถูกตัดให้): {unmatchedSkus.slice(0, 8).join(', ')}{unmatchedSkus.length > 8 ? ' ...' : ''}
+        </div>
+      )}
+
+      {parsedOrders.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>พบ {parsedOrders.length} ออเดอร์ ({parsedOrders.reduce((s, o) => s + o.items.length, 0)} รายการสินค้า)</div>
+          <div style={{ maxHeight: 220, overflowY: 'auto', border: `1px solid ${C.border}`, borderRadius: 10 }}>
+            <table style={{ ...S.table, fontSize: 12 }}>
+              <thead><tr>{['Order ID', 'วันที่', 'จำนวนสินค้า', 'ยอดขาย'].map(h => <th key={h} style={{ ...S.th, padding: '6px 10px', textAlign: h === 'ยอดขาย' ? 'right' : 'left' }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {parsedOrders.slice(0, 50).map(o => (
+                  <tr key={o.order_id}>
+                    <td style={{ ...S.td, padding: '6px 10px', fontFamily: 'monospace' }}>{o.order_id}</td>
+                    <td style={{ ...S.td, padding: '6px 10px' }}>{o.date || '-'}</td>
+                    <td style={{ ...S.td, padding: '6px 10px' }}>{o.items.length}</td>
+                    <td style={{ ...S.td, padding: '6px 10px', textAlign: 'right', fontWeight: 600 }}>฿{numFmt(o.total_revenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <button style={S.btn(C.border, C.muted)} onClick={onClose} disabled={busy}>ยกเลิก</button>
+        <button style={S.btn('#FB923C')} onClick={doImport} disabled={busy || !parsedOrders.length || !storeId}>
+          {busy ? 'กำลังนำเข้า...' : `🛍️ นำเข้า ${parsedOrders.length} ออเดอร์`}
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
 // ===================== SALES ORDER MODAL =====================
 function OrderModal({ onClose, onSaved }) {
   const [stores, setStores] = useState([])
@@ -1359,6 +1563,7 @@ function OrdersPage() {
   const [dateTo, setDateTo] = useState('')
   const [search, setSearch] = useState('')
   const [orderModal, setOrderModal] = useState(false)
+  const [shopeeImportOpen, setShopeeImportOpen] = useState(false)
   const [viewOrder, setViewOrder] = useState(null)
 
   const load = async () => { 
@@ -1397,7 +1602,8 @@ function OrdersPage() {
           ['เลขที่','วันที่','ร้าน','Platform','รายได้','ต้นทุน','กำไร','หมายเหตุ'],
           filtered.map(o=>[o.id,o.order_date,o.store_name,o.platform,o.total_revenue,o.total_cost,o.gross_profit,o.note])
         )}>⬇ Export CSV</button>
-        <button style={{...S.btn('#3B82F6'),marginLeft:'auto'}} onClick={()=>setOrderModal(true)}>📝 บันทึกการขาย</button>
+        <button style={{...S.btn('#FB923C'),marginLeft:'auto'}} onClick={()=>setShopeeImportOpen(true)}>🛍️ นำเข้าจาก Shopee</button>
+        <button style={S.btn('#3B82F6')} onClick={()=>setOrderModal(true)}>📝 บันทึกการขาย</button>
       </div>
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14}}>
@@ -1450,6 +1656,7 @@ function OrdersPage() {
       </div>
 
       {orderModal && <OrderModal onClose={()=>setOrderModal(false)} onSaved={load}/>}
+      {shopeeImportOpen && <ShopeeImportModal onClose={()=>setShopeeImportOpen(false)} onImported={load}/>}
       {viewOrder && (
         <Modal title={`รายละเอียดออเดอร์ #${viewOrder.id}`} onClose={()=>setViewOrder(null)} width={600}>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:16}}>
